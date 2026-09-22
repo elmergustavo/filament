@@ -315,6 +315,30 @@ describe('toolbar buttons', function (): void {
 });
 
 describe('file attachments', function (): void {
+    it('stores the server-detected `mimetype`', function (): void {
+        $richEditor = Schema::make(Livewire::make())
+            ->statePath('data')
+            ->components([
+                RichEditor::make('content')
+                    ->fileAttachmentsDirectory('attachments')
+                    ->fileAttachmentsDisk('public')
+                    ->fileAttachmentsVisibility('private'),
+            ])
+            ->getComponents()[0];
+
+        $file = Mockery::mock(TemporaryUploadedFile::class);
+        $file->shouldReceive('getMimeType')->once()->andReturn('image/png');
+        $file->shouldReceive('store')
+            ->once()
+            ->with('attachments', [
+                'disk' => 'public',
+                'mimetype' => 'image/png',
+            ])
+            ->andReturn('attachments/image.png');
+
+        expect($richEditor->saveUploadedFileAttachment($file))->toBe('attachments/image.png');
+    });
+
     test('`hasFileAttachments()` returns `true` by default', function (): void {
         $richEditor = Schema::make(Livewire::make())
             ->statePath('data')
