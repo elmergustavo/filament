@@ -496,6 +496,75 @@ describe('preventing existing file path tampering', function (): void {
     });
 });
 
+describe('`getUploadedFiles()` accumulation', function (): void {
+    it('preserves every key without changing files or state when `getUploadedFileUsing()` is `null`', function (): void {
+        Storage::fake('local');
+        Storage::disk('local')->put('uploads/report.txt', 'report');
+        Storage::disk('local')->put('uploads/notes.txt', 'meeting notes');
+        Storage::fake('tmp-for-tests');
+        Storage::disk('tmp-for-tests')->put('livewire-tmp/pending.txt', 'pending');
+
+        $temporaryFile = TemporaryUploadedFile::createFromLivewire('pending.txt');
+        $field = FileUpload::make('attachments')
+            ->container(Schema::make(Livewire::make())->statePath('data'))
+            ->disk('local')
+            ->multiple()
+            ->getUploadedFileUsing(null);
+
+        $state = [
+            'pending-key' => $temporaryFile,
+            'report-key' => 'uploads/report.txt',
+            'notes-key' => 'uploads/notes.txt',
+        ];
+        $field->rawState($state);
+
+        expect($field->getUploadedFiles())->toBe([
+            'pending-key' => null,
+            'report-key' => null,
+            'notes-key' => null,
+        ])
+            ->and($field->getRawState())->toBe($state)
+            ->and($temporaryFile->exists())->toBeTrue()
+            ->and(Storage::disk('local')->get('uploads/report.txt'))->toBe('report')
+            ->and(Storage::disk('local')->get('uploads/notes.txt'))->toBe('meeting notes');
+    });
+
+    it('continues past unauthorized paths and `null` metadata without exposing paths to read callbacks', function (): void {
+        Storage::fake('local');
+        Storage::disk('local')->put('uploads/hidden.txt', 'private');
+        Storage::disk('local')->put('uploads/report.txt', 'report');
+
+        $readFiles = [];
+        $metadata = ['name' => 'Report', 'size' => 6, 'type' => 'text/plain', 'url' => 'https://example.com/report'];
+        $field = FileUpload::make('attachments')
+            ->container(Schema::make(Livewire::make())->statePath('data'))
+            ->disk('local')
+            ->multiple()
+            ->preventFilePathTampering(allowFilePathUsing: static fn (string $file): bool => in_array($file, ['uploads/missing.txt', 'uploads/report.txt'], strict: true))
+            ->getUploadedFileUsing(static function (string $file, array $storedFileNames) use (&$readFiles, $metadata): ?array {
+                $readFiles[] = [$file, $storedFileNames];
+
+                return ($file === 'uploads/report.txt') ? $metadata : null;
+            });
+
+        $field->rawState([
+            'hidden-key' => 'uploads/hidden.txt',
+            'missing-key' => 'uploads/missing.txt',
+            'report-key' => 'uploads/report.txt',
+        ]);
+
+        expect($field->getUploadedFiles())->toBe([
+            'hidden-key' => null,
+            'missing-key' => null,
+            'report-key' => $metadata,
+        ])
+            ->and($readFiles)->toBe([
+                ['uploads/missing.txt', []],
+                ['uploads/report.txt', []],
+            ]);
+    });
+});
+
 describe('openable and downloadable URLs', function (): void {
     $makeField = function (Closure $configure): FileUpload {
         $field = FileUpload::make('document')
@@ -2742,6 +2811,27 @@ describe('`saveUploadedFile()` branches', function (): void {
         expect(Storage::disk('public')->exists($path))->toBeTrue();
     });
 
+    it('uses `hashName()` to derive the stored file extension from its MIME type', function () use ($makeField, $makeTemporaryUploadedFile): void {
+        Storage::fake('public');
+
+        $field = $makeField(static fn (FileUpload $field) => $field
+            ->disk('public')
+            ->directory('uploads'));
+
+        $gifContents = UploadedFile::fake()->image('image.gif')->getContent();
+        $file = $makeTemporaryUploadedFile('image.html', $gifContents);
+        $path = $field->saveUploadedFile($file);
+
+        expect($file->getMimeType())->toBe('image/gif')
+            ->and($file->getClientOriginalExtension())->toBe('html')
+            ->and(basename($path))->toBe($file->hashName())
+            ->and($path)
+            ->toStartWith('uploads/')
+            ->toEndWith('.gif')
+            ->not->toEndWith('.html')
+            ->and(Storage::disk('public')->exists($path))->toBeTrue();
+    });
+
     it('stores the server-detected `mimetype` instead of the temporary storage metadata', function () use ($makeField): void {
         Storage::fake('tmp-for-tests');
 
@@ -2788,7 +2878,7 @@ describe('`saveUploadedFile()` branches', function (): void {
 
         expect($path)
             ->toStartWith('uploads/')
-            ->toEndWith('.webp')
+            ->toEndWith('.png')
             ->and($file->storedOptions)->toBe([
                 'disk' => 'public',
                 'mimetype' => 'image/png',
@@ -2848,6 +2938,65 @@ describe('`saveUploadedFiles()` reordering', function (): void {
             ->multiple()
             ->reorderable();
     };
+
+    it('evaluates a dynamic `reorderable()` condition on every save before applying the callback order', function () use ($makeField, $makeTemporaryUploadedFile): void {
+        $temporaryFile = $makeTemporaryUploadedFile('report.txt', 'new report');
+        $isReorderable = false;
+        $reorderCallbackCount = 0;
+        $savedFiles = [];
+
+        $field = $makeField()
+            ->preserveFilenames()
+            ->reorderable(static function () use (&$isReorderable): bool {
+                return $isReorderable;
+            })
+            ->saveUploadedFileUsing(static function (BaseFileUpload $component, TemporaryUploadedFile $file) use (&$savedFiles): ?string {
+                $savedFiles[] = $file->getClientOriginalName();
+
+                return $component->saveUploadedFile($file);
+            })
+            ->reorderUploadedFilesUsing(static function (array $rawState) use (&$reorderCallbackCount): array {
+                $reorderCallbackCount++;
+
+                return array_reverse($rawState, preserve_keys: true);
+            });
+
+        Storage::disk('public')->put('uploads/existing.txt', 'existing');
+        $field->rawState([
+            'existing-key' => 'uploads/existing.txt',
+            'new-key' => $temporaryFile,
+        ]);
+
+        $field->saveUploadedFiles();
+
+        expect($field->getRawState())->toBe([
+            'existing-key' => 'uploads/existing.txt',
+            'new-key' => 'uploads/report.txt',
+        ])
+            ->and($reorderCallbackCount)->toBe(0)
+            ->and($savedFiles)->toBe(['report.txt'])
+            ->and($temporaryFile->exists())->toBeFalse()
+            ->and(Storage::disk('public')->get('uploads/report.txt'))->toBe('new report');
+
+        $isReorderable = true;
+        $field->saveUploadedFiles();
+
+        expect($field->getRawState())->toBe([
+            'new-key' => 'uploads/report.txt',
+            'existing-key' => 'uploads/existing.txt',
+        ])
+            ->and($reorderCallbackCount)->toBe(1);
+
+        $isReorderable = false;
+        $field->saveUploadedFiles();
+
+        expect($field->getRawState())->toBe([
+            'new-key' => 'uploads/report.txt',
+            'existing-key' => 'uploads/existing.txt',
+        ])
+            ->and($reorderCallbackCount)->toBe(1)
+            ->and($savedFiles)->toBe(['report.txt']);
+    });
 
     it('passes the saved files to a `reorderUploadedFilesUsing()` callback `$state` parameter', function () use ($makeField, $makeTemporaryUploadedFile): void {
         $temporaryFile = $makeTemporaryUploadedFile();
