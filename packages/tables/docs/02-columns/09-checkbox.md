@@ -1,7 +1,6 @@
 ---
 title: Checkbox column
 ---
-import AutoScreenshot from "@components/AutoScreenshot.astro"
 
 ## Introduction
 
@@ -13,7 +12,7 @@ use Filament\Tables\Columns\CheckboxColumn;
 CheckboxColumn::make('is_admin')
 ```
 
-<AutoScreenshot name="tables/columns/checkbox/simple" alt="Checkbox column" version="4.x" />
+<AutoScreenshot name="tables/columns/checkbox/simple" alt="Checkbox column" />
 
 ## Lifecycle hooks
 
@@ -33,4 +32,6 @@ CheckboxColumn::make()
 
 ### Authorization
 
-The checkbox column does not automatically check Laravel Model Policies before saving changes. When a user updates a value via the checkbox column, Filament checks whether the column is `disabled()` but does not run any `update` policy gate check. This means that if a user can see a record in the table and the column is not disabled, they can update that column's value regardless of any `update` policy you have defined. If you need to restrict who can edit this column, you should use the `disabled()` method to conditionally prevent editing based on your own authorization logic, for example `disabled(fn ($record) => $record->user_id !== auth()->id())`. Alternatively, consider using a full edit page or modal action where Filament's resource authorization is enforced.
+Checkbox columns do not automatically check model policies. Without an authorization check, users can update the column for records accessible through the table query, even if the record's `update()` policy denies access to its edit page. Use `disabled()` with your authorization logic, for example `disabled(fn ($record) => $record->user_id !== auth()->id())`. Filament checks this condition on the server before saving.
+
+Check permission for the specific attribute being changed, especially sensitive attributes such as administrator access. If the column updates a related model or pivot, authorize that operation too. Alternatively, use a resource edit page or a policy-backed `EditAction` to apply the resource's edit authorization.

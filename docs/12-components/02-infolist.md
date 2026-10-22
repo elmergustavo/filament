@@ -1,7 +1,6 @@
 ---
 title: Rendering an infolist in a Blade view
 ---
-import Aside from "@components/Aside.astro"
 
 <Aside variant="warning">
     Before proceeding, make sure `filament/infolists` is installed in your project. You can check by running:
@@ -70,7 +69,7 @@ public function productInfolist(Schema $schema): Schema
 ```
 
 <Aside variant="warning">
-    `$product` is a model property on a regular Livewire component. Filament does not re-query or authorize it on later requests. Re-query and authorize the product before passing it to the infolist. See [Eloquent model restoration in Livewire](../advanced/security#understanding-eloquent-model-restoration-in-livewire) for more information.
+    `$product` is a model property on a regular Livewire component. Filament does not re-query or authorize it on later requests. Re-query and authorize the product before passing it to the infolist, including any tenant or ownership restrictions your application requires. See [Eloquent model restoration in Livewire](../advanced/security#understanding-eloquent-model-restoration-in-livewire) for more information.
 </Aside>
 
 Finally, render the infolist in the Livewire component's view:
@@ -115,7 +114,7 @@ public function productInfolist(Schema $schema): Schema
 }
 ```
 
-Alternatively, you can pass an array of data to the `state()` method of the infolist, to manually map the data to the entries in the infolist's schema:
+Alternatively, you can pass an array of data to the `constantState()` method of the infolist, to manually map the data to the entries in the infolist's schema:
 
 ```php
 use Filament\Infolists\Components\TextEntry;

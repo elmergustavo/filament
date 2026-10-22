@@ -8,6 +8,7 @@ use Filament\Support\Services\RelationshipJoiner;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Database\Query\Grammars\SqlServerGrammar;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
 use Znck\Eloquent\Relations\BelongsToThrough;
@@ -52,12 +53,33 @@ class SelectFilter extends BaseFilter
         );
 
         $this->indicateUsing(static function (SelectFilter $filter, array $state): array {
-            if ($filter->isMultiple()) {
-                if (blank($state['values'] ?? null)) {
-                    return [];
-                }
+            if (blank($filter->isMultiple() ? ($state['values'] ?? null) : ($state['value'] ?? null))) {
+                return [];
+            }
 
-                if ($filter->queriesRelationships()) {
+            $relationshipOptionLabels = null;
+
+            if ($filter->queriesRelationships()) {
+                $relationshipOptionLabels = $filter->getTable()->withAppliedFiltersFormState(static function () use ($filter): ?array {
+                    $select = $filter->getTable()->getFiltersForm()->getComponentByStatePath(
+                        $filter->getName() . '.' . ($filter->isMultiple() ? 'values' : 'value'),
+                        withHidden: true,
+                    );
+
+                    if (! $select instanceof Select) {
+                        return null;
+                    }
+
+                    return $filter->isMultiple()
+                        ? $select->getOptionLabels(withDefaults: false)
+                        : [$select->getOptionLabel(withDefault: false)];
+                });
+            }
+
+            if ($filter->isMultiple()) {
+                if ($relationshipOptionLabels !== null) {
+                    $labels = $relationshipOptionLabels;
+                } elseif ($filter->queriesRelationships()) {
                     $relationshipQuery = $filter->getRelationshipQuery();
 
                     $labels = [];
@@ -106,11 +128,9 @@ class SelectFilter extends BaseFilter
                 return [$indicator];
             }
 
-            if (blank($state['value'] ?? null)) {
-                return [];
-            }
-
-            if ($filter->queriesRelationships()) {
+            if ($relationshipOptionLabels !== null) {
+                $label = $relationshipOptionLabels[0] ?? null;
+            } elseif ($filter->queriesRelationships()) {
                 if (
                     $filter->hasEmptyRelationshipOption() &&
                     ($state['value'] === static::EMPTY_RELATIONSHIP_OPTION_KEY)
@@ -206,6 +226,15 @@ class SelectFilter extends BaseFilter
                         $query = $this->evaluate($this->modifyRelationshipQueryUsing, [
                             'query' => $query,
                         ]) ?? $query;
+                    }
+
+                    if (
+                        ($query->getQuery()->getGrammar() instanceof SqlServerGrammar) &&
+                        ($query->getQuery()->limit === null) &&
+                        (! $query->getQuery()->offset) &&
+                        ($query->getQuery()->groupLimit === null)
+                    ) {
+                        $query->reorder();
                     }
 
                     $queryValues = $isMultiple ? $filteredValues : $filteredValues[0];

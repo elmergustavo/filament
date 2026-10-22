@@ -1,7 +1,6 @@
 ---
 title: Testing tables
 ---
-import Aside from "@components/Aside.astro"
 
 ## Testing that a table can render
 
@@ -59,7 +58,7 @@ For testing that a column is not rendered, you can use `assertCanNotRenderTableC
 use function Pest\Livewire\livewire;
 
 it('can not render post comments', function () {
-    Post::factory()->count(10)->create()
+    Post::factory()->count(10)->create();
 
     livewire(PostResource\Pages\ListPosts::class)
         ->assertCanNotRenderTableColumn('comments');

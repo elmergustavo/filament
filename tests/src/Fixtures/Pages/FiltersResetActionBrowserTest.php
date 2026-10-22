@@ -23,13 +23,11 @@ class FiltersResetActionBrowserTest extends Page implements HasTable
 {
     use Tables\Concerns\InteractsWithTable;
 
-    public bool $areFiltersDeferred = false;
-
-    public int $applyActionVersion = 0;
-
     public string $focusScenario = 'default';
 
     public bool $hasFocusLifecycleFilters = false;
+
+    public bool $hasDeferredFilters = false;
 
     protected static string | BackedEnum | null $navigationIcon = Heroicon::OutlinedFunnel;
 
@@ -37,9 +35,9 @@ class FiltersResetActionBrowserTest extends Page implements HasTable
 
     public function mount(): void
     {
-        $this->areFiltersDeferred = request()->boolean('deferred');
         $this->focusScenario = request()->string('focusScenario')->toString();
         $this->hasFocusLifecycleFilters = request()->boolean('focus');
+        $this->hasDeferredFilters = request()->boolean('deferred');
     }
 
     public function table(Table $table): Table
@@ -112,15 +110,7 @@ class FiltersResetActionBrowserTest extends Page implements HasTable
                 'selectFirst' => [$detailsFilter, $publishedFilter],
                 default => $this->hasFocusLifecycleFilters ? [$publishedFilter, $detailsFilter] : [$publishedFilter],
             })
-            ->deferFilters($this->areFiltersDeferred)
-            ->filtersApplyAction(
-                fn (Action $action) => $action
-                    ->action('applyTableFiltersAndUpdateAction')
-                    ->extraAttributes(fn (): array => [
-                        'data-testid' => 'filters-apply-action',
-                        'id' => "filters-apply-action-{$this->applyActionVersion}",
-                    ]),
-            )
+            ->deferFilters($this->hasDeferredFilters)
             ->filtersTriggerAction(
                 static fn (Action $action) => $action
                     ->extraAttributes(['data-testid' => 'filters-trigger']),
@@ -132,13 +122,6 @@ class FiltersResetActionBrowserTest extends Page implements HasTable
                     ->iconButton()
                     ->extraAttributes(['data-testid' => 'filters-reset-action']),
             );
-    }
-
-    public function applyTableFiltersAndUpdateAction(): void
-    {
-        $this->applyTableFilters();
-
-        $this->applyActionVersion++;
     }
 
     public function content(Schema $schema): Schema

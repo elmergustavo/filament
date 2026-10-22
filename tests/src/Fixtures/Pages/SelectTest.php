@@ -21,6 +21,8 @@ class SelectTest extends Page
 
     public ?array $data = [];
 
+    public bool $isSelectDisabled = false;
+
     public function mount(): void
     {
         $this->form->fill();
@@ -53,7 +55,10 @@ class SelectTest extends Page
                     ->extraAttributes(['data-testid' => 'multiple-select']),
 
                 Select::make('searchable_status')
+                    ->id('searchable-status')
                     ->label('Searchable Select')
+                    ->helperText('Choose the color used for this status.')
+                    ->required()
                     ->options([
                         'red' => 'Red',
                         'green' => 'Green',
@@ -63,6 +68,24 @@ class SelectTest extends Page
                     ])
                     ->searchable()
                     ->extraAttributes(['data-testid' => 'searchable-select']),
+
+                Select::make('nonsearchable_multiple_status')
+                    ->label('Publication channels')
+                    ->multiple()
+                    ->searchable(false)
+                    ->disabled(fn (): bool => $this->isSelectDisabled)
+                    ->options([
+                        'website' => 'Website',
+                        'Social' => [
+                            'archived' => 'Archived channel',
+                            'newsletter' => 'Newsletter',
+                        ],
+                        'print' => 'Print',
+                        'mobile' => 'Mobile app',
+                    ])
+                    ->disableOptionWhen(static fn (string $value): bool => $value === 'archived')
+                    ->optionsLimit(4)
+                    ->extraAttributes(['data-testid' => 'nonsearchable-multiple-select']),
 
                 Select::make('clearable_status')
                     ->label('Clearable Select')
@@ -109,14 +132,13 @@ class SelectTest extends Page
                     ->extraAttributes(['data-testid' => 'static-empty-options-select']),
 
                 Select::make('dynamic_options_with_results')
+                    ->id('dynamic-select')
                     ->label('Dynamic Options With Results')
                     ->options(fn (): array => [
                         'dynamic1' => 'Dynamic Option 1',
                         'dynamic2' => 'Dynamic Option 2',
                     ])
-                    ->getSearchResultsUsing(fn (string $search): array => [
-                        'result1' => 'Search Result 1',
-                    ])
+                    ->getSearchResultsUsing(static fn (string $search): array => ['result1' => 'Search Result 1'])
                     ->getOptionLabelUsing(fn ($value): ?string => match ($value) {
                         'dynamic1' => 'Dynamic Option 1',
                         'dynamic2' => 'Dynamic Option 2',
@@ -148,8 +170,14 @@ class SelectTest extends Page
                     ->native(false)
                     ->createOptionForm([
                         TextInput::make('name')
+                            ->autofocus()
                             ->required()
                             ->extraInputAttributes(['data-testid' => 'create-option-name-input']),
+                        Select::make('category')
+                            ->label('Category')
+                            ->searchable()
+                            ->options(['news' => 'News', 'guide' => 'Guide'])
+                            ->extraAttributes(['data-testid' => 'modal-select']),
                     ])
                     ->createOptionUsing(static fn (array $data): string => $data['name'])
                     ->createOptionAction(static fn (Action $action): Action => $action

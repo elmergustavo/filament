@@ -3,6 +3,7 @@
 namespace Filament\Tables\Concerns;
 
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Query\Grammars\SqlServerGrammar;
 
 trait CanSortRecords
 {
@@ -91,9 +92,13 @@ trait CanSortRecords
             $tableSortColumn &&
             $column = $this->getTable()->getSortableVisibleColumn($tableSortColumn)
         ) {
-            $sortDirection = $this->getTableSortDirection() === 'desc' ? 'desc' : 'asc';
+            if ($column->isToggledHidden()) {
+                $tableSortColumn = null;
+            } else {
+                $sortDirection = $this->getTableSortDirection() === 'desc' ? 'desc' : 'asc';
 
-            $column->applySort($query, $sortDirection);
+                $column->applySort($query, $sortDirection);
+            }
         }
 
         $sortDirection = ($this->getTable()->getDefaultSortDirection() ?? $this->getTableSortDirection()) === 'desc' ? 'desc' : 'asc';
@@ -104,6 +109,14 @@ trait CanSortRecords
             ($defaultSort !== $tableSortColumn) &&
             ($sortColumn = $this->getTable()->getSortableVisibleColumn($defaultSort))
         ) {
+            if ($sortColumn->isToggledHidden()) {
+                $sortColumn->applyRelationshipAggregates($query);
+
+                if ($defaultSort === $this->getTableSortColumn()) {
+                    $sortDirection = $this->getTableSortDirection() === 'desc' ? 'desc' : 'asc';
+                }
+            }
+
             $sortColumn->applySort($query, $sortDirection);
         } elseif (
             is_string($defaultSort) &&
@@ -114,6 +127,17 @@ trait CanSortRecords
 
         if ($defaultSort instanceof Builder) {
             $query = $defaultSort;
+        }
+
+        if ($query->getQuery()->getGrammar() instanceof SqlServerGrammar) {
+            $query->getQuery()->orders = collect($query->getQuery()->orders)
+                ->unique(static function (array $order, int $index) use ($query): string {
+                    $column = $order['column'] ?? null;
+
+                    return is_string($column) ? $query->qualifyColumn($column) : "expression:{$index}";
+                })
+                ->values()
+                ->all();
         }
 
         if (! $this->getTable()->hasDefaultKeySort()) {

@@ -201,7 +201,7 @@ class BaseFileUpload extends Field implements Contracts\HasNestedRecursiveValida
             }
         }
 
-        $url ??= $storage->url($file);
+        $url ??= str_replace(' ', '%20', $storage->url($file));
 
         return [
             'name' => ($this->isMultiple() ? ($storedFileNames[$file] ?? null) : $storedFileNames) ?? basename($file),
@@ -229,12 +229,16 @@ class BaseFileUpload extends Field implements Contracts\HasNestedRecursiveValida
         ) {
             $newPath = trim($this->getDirectory() . '/' . $this->getUploadedFileNameForStorage($file), '/');
 
-            $this->getDisk()->move(
+            $hasMoved = $this->getDisk()->move(
                 (function (): string {
                     return $this->path;
                 })->call($file),
                 $newPath,
             );
+
+            if ($hasMoved && ($this->getVisibility() === 'public')) {
+                rescue(fn () => $this->getDisk()->setVisibility($newPath, 'public'), report: false);
+            }
 
             return $newPath;
         }

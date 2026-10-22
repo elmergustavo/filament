@@ -1,9 +1,6 @@
 ---
 title: File upload
 ---
-import Aside from "@components/Aside.astro"
-import AutoScreenshot from "@components/AutoScreenshot.astro"
-import UtilityInjection from "@components/UtilityInjection.astro"
 
 ## Introduction
 
@@ -15,13 +12,15 @@ use Filament\Forms\Components\FileUpload;
 FileUpload::make('attachment')
 ```
 
-<AutoScreenshot name="forms/fields/file-upload/simple" alt="File upload" version="4.x" />
+<AutoScreenshot name="forms/fields/file-upload/simple" alt="File upload" />
 
 <Aside variant="tip">
     Filament also supports [`spatie/laravel-medialibrary`](https://github.com/spatie/laravel-medialibrary). See our [plugin documentation](https://filamentphp.com/plugins/filament-spatie-media-library) for more information.
 </Aside>
 
 <Aside variant="danger">
+    Restrict [accepted file types](#file-type-validation) using `acceptedFileTypes()` or `image()`, and configure your web server so uploaded files cannot execute as code.
+
     By default, `FileUpload` accepts any string path within the configured disk — the field value is a client-controlled string and a tampered request can submit any other file on the same disk. If the disk holds files for more than one user, tenant, or record, call [`preventFilePathTampering()`](#authorizing-existing-file-paths) on the field, or use a dedicated disk containing only files that the current user may access. Setting `directory()` only changes where new uploads are stored; it does not restrict which existing paths can be submitted.
 </Aside>
 
@@ -44,10 +43,10 @@ FileUpload::make('attachment')
     ->visibility('public')
 ```
 
-<UtilityInjection set="formFields" version="4.x">As well as allowing static values, the `disk()`, `directory()` and `visibility()` methods accept functions to dynamically calculate them. You can inject various utilities into the functions as parameters. </UtilityInjection>
+<UtilityInjection set="formFields">As well as allowing static values, the `disk()`, `directory()` and `visibility()` methods accept functions to dynamically calculate them. You can inject various utilities into the functions as parameters. </UtilityInjection>
 
 <Aside variant="warning">
-    The default visibility is decided by a literal string match against the disk name: a disk literally named `public` is treated as publicly visible, and any other disk name defaults to `private`. A custom disk that happens to be named `public` will therefore be treated as public even if its underlying configuration is private, and a custom publicly-visible disk under a different name will default to private. To avoid confusion, either give custom disks unambiguous names or set `visibility()` explicitly on each field.
+    The default visibility depends on the disk's name, not its filesystem configuration: a disk named `public` defaults to public visibility, and other disks default to private. Set `visibility()` explicitly when using a custom disk whose name does not reflect its intended visibility.
 </Aside>
 
 <Aside variant="info">
@@ -74,7 +73,7 @@ FileUpload::make('attachments')
     ->multiple(FeatureFlag::active())
 ```
 
-<UtilityInjection set="formFields" version="4.x">As well as allowing a static value, the `multiple()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
+<UtilityInjection set="formFields">As well as allowing a static value, the `multiple()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
 
 If you're saving the file URLs using Eloquent, you should be sure to add an `array` [cast](https://laravel.com/docs/eloquent-mutators#array-and-json-casting) to the model property:
 
@@ -111,7 +110,7 @@ FileUpload::make('attachments')
 
 This will limit the number of parallel uploads to `1`. If unset, we'll use the [default FilePond value](https://pqina.nl/filepond/docs/api/instance/properties/#core-properties) which is `2`.
 
-<UtilityInjection set="formFields" version="4.x">As well as allowing a static value, the `maxParallelUploads()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
+<UtilityInjection set="formFields">As well as allowing a static value, the `maxParallelUploads()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
 
 ## Controlling file names
 
@@ -119,13 +118,13 @@ By default, a random file name will be generated for newly-uploaded files. This 
 
 ### Security implications of controlling file names
 
-Before using the `preserveFilenames()` or `getUploadedFileNameForStorageUsing()` methods, please be aware of the security implications. If you allow users to upload files with their own file names, there are ways that they can exploit this to upload malicious files. **This applies even if you use the [`acceptedFileTypes()`](#file-type-validation) method** to restrict the types of files that can be uploaded, since it uses Laravel's `mimetypes` rule which does not validate the extension of the file, only its mime type, which could be manipulated.
+Before using `preserveFilenames()` or `getUploadedFileNameForStorageUsing()`, consider the risk of storing user-controlled file names. [`acceptedFileTypes()`](#file-type-validation) uses Laravel's `mimetypes` rule to validate the detected MIME type. Laravel also blocks common PHP file extensions, but this is not a general allowlist of safe file extensions or a substitute for secure web server configuration.
 
-This is specifically an issue with the `getClientOriginalName()` method on the `TemporaryUploadedFile` object, which the `preserveFilenames()` method uses. By default, Filament uses Laravel's `hashName()` method to generate a random file name and determine the file extension from the file's mime type.
+By default, Filament uses Laravel's `hashName()` to generate a random name with an extension based on the detected MIME type. `preserveFilenames()` uses the client-supplied name instead.
 
-Using these methods **with the `local` or `public` filesystem disks** will make your app vulnerable to remote code execution if the attacker uploads a PHP file with a deceptive mime type. **Using an S3 disk protects you from this specific attack vector**, as S3 will not execute PHP files in the same way that your server might when serving files from local storage.
+If you serve uploaded files from a `local` or `public` disk, configure the web server so it cannot execute them as code. Executable uploads can otherwise lead to remote code execution, depending on the file validation, naming callback, and server configuration. S3 does not execute PHP files, which avoids this specific attack vector; it does not replace file validation or access controls.
 
-If you are using the `local` or `public` disk, you should consider using the [`storeFileNamesIn()` method](#storing-original-file-names-independently) to store the original file names in a separate column in your database, and keep the randomly generated file names in the file system. This way, you can still display the original file names to users, while keeping the file system secure.
+To display original names without using them as storage paths, use [`storeFileNamesIn()`](#storing-original-file-names-independently) and keep the randomly generated names on disk.
 
 On top of this security issue, you should also be aware that allowing users to upload files with their own file names can lead to conflicts with existing files, and can make it difficult to manage your storage. Users could upload files with the same name and overwrite the other's content if you do not scope them to a specific directory, so these features should in all cases only be accessible to trusted users.
 
@@ -153,7 +152,7 @@ FileUpload::make('attachment')
     ->preserveFilenames(FeatureFlag::active())
 ```
 
-<UtilityInjection set="formFields" version="4.x">As well as allowing a static value, the `preserveFilenames()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
+<UtilityInjection set="formFields">As well as allowing a static value, the `preserveFilenames()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
 
 ### Generating custom file names
 
@@ -173,7 +172,7 @@ FileUpload::make('attachment')
     )
 ```
 
-<UtilityInjection set="formFields" version="4.x" extras="File;;Livewire\Features\SupportFileUploads\TemporaryUploadedFile;;$file;;The temporary file object being uploaded.">You can inject various utilities into the function passed to `getUploadedFileNameForStorageUsing()` as parameters.</UtilityInjection>
+<UtilityInjection set="formFields" extras="File;;Livewire\Features\SupportFileUploads\TemporaryUploadedFile;;$file;;The temporary file object being uploaded.">You can inject various utilities into the function passed to `getUploadedFileNameForStorageUsing()` as parameters.</UtilityInjection>
 
 ### Storing original file names independently
 
@@ -189,7 +188,7 @@ FileUpload::make('attachments')
 
 `attachment_file_names` will now store the original file names of your uploaded files, so you can save them to the database when the form is submitted. If you're uploading `multiple()` files, make sure that you add an `array` [cast](https://laravel.com/docs/eloquent-mutators#array-and-json-casting) to this Eloquent model property too.
 
-<UtilityInjection set="formFields" version="4.x">As well as allowing a static value, the `storeFileNamesIn()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
+<UtilityInjection set="formFields">As well as allowing a static value, the `storeFileNamesIn()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
 
 ## Authorizing existing file paths
 
@@ -240,9 +239,9 @@ FileUpload::make('avatar')
 
 The callback receives the path exactly as submitted by the client. Use exact trusted paths where possible. Do not authorize an arbitrary directory using a prefix check, since the filesystem may normalize segments such as `..` after the callback runs.
 
-<UtilityInjection set="formFields" version="4.x" extras="File;;string;;$file;;The submitted file path being authorized.">You can inject various utilities into the function passed to `allowFilePathUsing` as parameters.</UtilityInjection>
+<UtilityInjection set="formFields" extras="File;;string;;$file;;The submitted file path being authorized.">You can inject various utilities into the function passed to `allowFilePathUsing` as parameters.</UtilityInjection>
 
-The validation error message can be customized via [`validationMessages()`](validation#customizing-validation-messages) using the `tampered` key:
+The validation error message can be customized via [`validationMessages()`](validation#validation-messages) using the `tampered` key:
 
 ```php
 use Filament\Forms\Components\FileUpload;
@@ -267,7 +266,7 @@ FileUpload::make('avatar')
 
 This will only allow images to be uploaded, and when they are, it will display them in a compact circle layout that is perfect for avatars.
 
-<AutoScreenshot name="forms/fields/file-upload/avatar" alt="File upload with avatar mode" version="4.x" />
+<AutoScreenshot name="forms/fields/file-upload/avatar" alt="File upload with avatar mode" />
 
 This feature pairs well with the [circle cropper](#allowing-users-to-crop-images-as-a-circle).
 
@@ -285,7 +284,7 @@ FileUpload::make('image')
 
 You can open the editor once you upload an image by clicking the pencil icon. You can also open the editor by clicking the pencil icon on an existing image, which will remove and re-upload it on save.
 
-<AutoScreenshot name="forms/fields/file-upload/image-editor" alt="File upload image editor with cropping controls" version="4.x" />
+<AutoScreenshot name="forms/fields/file-upload/image-editor" alt="File upload image editor with cropping controls" />
 
 Optionally, you may pass a boolean value to control if the image editor is enabled:
 
@@ -297,7 +296,7 @@ FileUpload::make('image')
     ->imageEditor(FeatureFlag::active())
 ```
 
-<UtilityInjection set="formFields" version="4.x">As well as allowing a static value, the `imageEditor()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
+<UtilityInjection set="formFields">As well as allowing a static value, the `imageEditor()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
 
 ### Allowing users to crop images to aspect ratios
 
@@ -332,7 +331,7 @@ FileUpload::make('image')
     ])
 ```
 
-<UtilityInjection set="formFields" version="4.x">As well as allowing a static value, the `imageEditorAspectRatioOptions()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
+<UtilityInjection set="formFields">As well as allowing a static value, the `imageEditorAspectRatioOptions()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
 
 ### Setting the image editor's mode
 
@@ -347,7 +346,7 @@ FileUpload::make('image')
     ->imageEditorMode(2)
 ```
 
-<UtilityInjection set="formFields" version="4.x">As well as allowing a static value, the `imageEditorMode()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
+<UtilityInjection set="formFields">As well as allowing a static value, the `imageEditorMode()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
 
 ### Customizing the image editor's empty fill color
 
@@ -362,7 +361,7 @@ FileUpload::make('image')
     ->imageEditorEmptyFillColor('#000000')
 ```
 
-<UtilityInjection set="formFields" version="4.x">As well as allowing a static value, the `imageEditorEmptyFillColor()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
+<UtilityInjection set="formFields">As well as allowing a static value, the `imageEditorEmptyFillColor()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
 
 ### Setting the image editor's viewport size
 
@@ -378,7 +377,7 @@ FileUpload::make('image')
     ->imageEditorViewportHeight('1080')
 ```
 
-<UtilityInjection set="formFields" version="4.x">As well as allowing static values, the `imageEditorViewportWidth()` and `imageEditorViewportHeight()` methods also accept functions to dynamically calculate them. You can inject various utilities into the functions as parameters.</UtilityInjection>
+<UtilityInjection set="formFields">As well as allowing static values, the `imageEditorViewportWidth()` and `imageEditorViewportHeight()` methods also accept functions to dynamically calculate them. You can inject various utilities into the functions as parameters.</UtilityInjection>
 
 ### Allowing users to crop images as a circle
 
@@ -408,7 +407,7 @@ FileUpload::make('image')
     ->circleCropper(FeatureFlag::active())
 ```
 
-<UtilityInjection set="formFields" version="4.x">As well as allowing a static value, the `circleCropper()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
+<UtilityInjection set="formFields">As well as allowing a static value, the `circleCropper()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
 
 ### Enforcing a specific aspect ratio
 
@@ -450,7 +449,7 @@ FileUpload::make('banner')
     ->automaticallyOpenImageEditorForAspectRatio(FeatureFlag::active())
 ```
 
-<UtilityInjection set="formFields" version="4.x">As well as allowing a static value, the `automaticallyOpenImageEditorForAspectRatio()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
+<UtilityInjection set="formFields">As well as allowing a static value, the `automaticallyOpenImageEditorForAspectRatio()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
 
 <Aside variant="info">
     The `automaticallyOpenImageEditorForAspectRatio()` method can only be used with a single aspect ratio. If you need to allow multiple aspect ratios, use `imageAspectRatio()` for validation only, and consider using [`imageEditor()`](#image-editor) with [`imageEditorAspectRatioOptions()`](#allowing-users-to-crop-images-to-aspect-ratios) to let users choose their preferred ratio.
@@ -489,7 +488,7 @@ FileUpload::make('image')
     ->automaticallyResizeImagesToHeight('1080')
 ```
 
-<UtilityInjection set="formFields" version="4.x">As well as allowing static values, the `automaticallyResizeImagesMode()`, `automaticallyCropImagesToAspectRatio()`, `automaticallyResizeImagesToHeight()` and `automaticallyResizeImagesToWidth()` methods also accept functions to dynamically calculate them. You can inject various utilities into the functions as parameters.</UtilityInjection>
+<UtilityInjection set="formFields">As well as allowing static values, the `automaticallyResizeImagesMode()`, `automaticallyCropImagesToAspectRatio()`, `automaticallyResizeImagesToHeight()` and `automaticallyResizeImagesToWidth()` methods also accept functions to dynamically calculate them. You can inject various utilities into the functions as parameters.</UtilityInjection>
 
 <Aside variant="warning">
     When using automatic image cropping, the crop is applied automatically without user interaction. The user cannot choose which part of the image to keep. If you want users to control how their images are cropped, use [`automaticallyOpenImageEditorForAspectRatio()`](#enforcing-a-specific-aspect-ratio) instead.
@@ -512,7 +511,7 @@ FileUpload::make('attachment')
     ->uploadProgressIndicatorPosition('left')
 ```
 
-<UtilityInjection set="formFields" version="4.x">As well as allowing static values, these methods also accept functions to dynamically calculate them. You can inject various utilities into the functions as parameters.</UtilityInjection>
+<UtilityInjection set="formFields">As well as allowing static values, these methods also accept functions to dynamically calculate them. You can inject various utilities into the functions as parameters.</UtilityInjection>
 
 ### Displaying files in a grid
 
@@ -526,9 +525,9 @@ FileUpload::make('attachments')
     ->panelLayout('grid')
 ```
 
-<AutoScreenshot name="forms/fields/file-upload/multiple-grid" alt="File upload with grid layout" version="4.x" />
+<AutoScreenshot name="forms/fields/file-upload/multiple-grid" alt="File upload with grid layout" />
 
-<UtilityInjection set="formFields" version="4.x">As well as allowing a static value, the `panelLayout()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
+<UtilityInjection set="formFields">As well as allowing a static value, the `panelLayout()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
 
 ## Reordering files
 
@@ -564,7 +563,7 @@ FileUpload::make('attachments')
     ->appendFiles(FeatureFlag::active())
 ```
 
-<UtilityInjection set="formFields" version="4.x">As well as allowing a static value, the `reorderable()` and `appendFiles()` methods also accept functions to dynamically calculate them. You can inject various utilities into the functions as parameters.</UtilityInjection>
+<UtilityInjection set="formFields">As well as allowing a static value, the `reorderable()` and `appendFiles()` methods also accept functions to dynamically calculate them. You can inject various utilities into the functions as parameters.</UtilityInjection>
 
 ## Opening files in a new tab
 
@@ -588,9 +587,9 @@ FileUpload::make('attachments')
     ->openable(FeatureFlag::active())
 ```
 
-<UtilityInjection set="formFields" version="4.x">As well as allowing a static value, the `openable()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
+<UtilityInjection set="formFields">As well as allowing a static value, the `openable()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
 
-<AutoScreenshot name="forms/fields/file-upload/openable" alt="File upload with openable files" version="4.x" />
+<AutoScreenshot name="forms/fields/file-upload/openable" alt="File upload with openable files" />
 
 ### Customizing the URL used when opening a file
 
@@ -607,7 +606,7 @@ FileUpload::make('attachments')
 
 The function receives the stored `$file` path and must return the URL that should be used when the "open" button is clicked. Returning `null` falls back to the default URL.
 
-<UtilityInjection set="formFields" version="4.x">The `getOpenableFileUrlUsing()` method also accepts a function with utility injection. In addition to the standard utilities, the `$file` parameter contains the stored file path.</UtilityInjection>
+<UtilityInjection set="formFields">The `getOpenableFileUrlUsing()` method also accepts a function with utility injection. In addition to the standard utilities, the `$file` parameter contains the stored file path.</UtilityInjection>
 
 ## Downloading files
 
@@ -631,9 +630,9 @@ FileUpload::make('attachments')
     ->downloadable(FeatureFlag::active())
 ```
 
-<UtilityInjection set="formFields" version="4.x">As well as allowing a static value, the `downloadable()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
+<UtilityInjection set="formFields">As well as allowing a static value, the `downloadable()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
 
-<AutoScreenshot name="forms/fields/file-upload/downloadable" alt="File upload with downloadable files" version="4.x" />
+<AutoScreenshot name="forms/fields/file-upload/downloadable" alt="File upload with downloadable files" />
 
 ### Customizing the URL used when downloading a file
 
@@ -650,7 +649,7 @@ FileUpload::make('attachments')
 
 The function receives the stored `$file` path and must return the URL that should be used when the download button is clicked. Returning `null` falls back to the default URL.
 
-<UtilityInjection set="formFields" version="4.x">The `getDownloadableFileUrlUsing()` method also accepts a function with utility injection. In addition to the standard utilities, the `$file` parameter contains the stored file path.</UtilityInjection>
+<UtilityInjection set="formFields">The `getDownloadableFileUrlUsing()` method also accepts a function with utility injection. In addition to the standard utilities, the `$file` parameter contains the stored file path.</UtilityInjection>
 
 ## Previewing files
 
@@ -664,7 +663,7 @@ FileUpload::make('attachments')
     ->previewable(false)
 ```
 
-<UtilityInjection set="formFields" version="4.x">As well as allowing a static value, the `previewable()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
+<UtilityInjection set="formFields">As well as allowing a static value, the `previewable()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
 
 ## Moving files instead of copying when the form is submitted
 
@@ -686,7 +685,7 @@ FileUpload::make('attachment')
     ->moveFiles(FeatureFlag::active())
 ```
 
-<UtilityInjection set="formFields" version="4.x">As well as allowing a static value, the `moveFiles()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
+<UtilityInjection set="formFields">As well as allowing a static value, the `moveFiles()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
 
 ## Preventing files from being stored permanently
 
@@ -701,7 +700,7 @@ FileUpload::make('attachment')
 
 When the form is submitted, a temporary file upload object will be returned instead of a permanently stored file path. This is perfect for temporary files like imported CSVs.
 
-<UtilityInjection set="formFields" version="4.x">As well as allowing a static value, the `storeFiles()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
+<UtilityInjection set="formFields">As well as allowing a static value, the `storeFiles()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
 
 <Aside variant="warning">
     Images, video and audio files will not show the stored file name in the form's preview, unless you use [`previewable(false)`](#previewing-files). This is due to a limitation with the FilePond preview plugin.
@@ -718,7 +717,7 @@ FileUpload::make('attachment')
     ->orientImagesFromExif(false)
 ```
 
-<UtilityInjection set="formFields" version="4.x">As well as allowing a static value, the `orientImagesFromExif()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
+<UtilityInjection set="formFields">As well as allowing a static value, the `orientImagesFromExif()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
 
 ## Hiding the remove file button
 
@@ -731,7 +730,7 @@ FileUpload::make('attachment')
     ->deletable(false)
 ```
 
-<UtilityInjection set="formFields" version="4.x">As well as allowing a static value, the `deletable()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
+<UtilityInjection set="formFields">As well as allowing a static value, the `deletable()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
 
 ## Preventing pasting files
 
@@ -744,7 +743,7 @@ FileUpload::make('attachment')
     ->pasteable(false)
 ```
 
-<UtilityInjection set="formFields" version="4.x">As well as allowing a static value, the `pasteable()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
+<UtilityInjection set="formFields">As well as allowing a static value, the `pasteable()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
 
 ## Preventing file information fetching
 
@@ -757,7 +756,7 @@ FileUpload::make('attachment')
     ->fetchFileInformation(false)
 ```
 
-<UtilityInjection set="formFields" version="4.x">As well as allowing a static value, the `fetchFileInformation()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
+<UtilityInjection set="formFields">As well as allowing a static value, the `fetchFileInformation()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
 
 ## Customizing the uploading message
 
@@ -770,7 +769,7 @@ FileUpload::make('attachment')
     ->uploadingMessage('Uploading attachment...')
 ```
 
-<UtilityInjection set="formFields" version="4.x">As well as allowing a static value, the `uploadingMessage()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
+<UtilityInjection set="formFields">As well as allowing a static value, the `uploadingMessage()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
 
 ## File upload validation
 
@@ -797,7 +796,7 @@ FileUpload::make('document')
     ->acceptedFileTypes(['application/pdf'])
 ```
 
-<UtilityInjection set="formFields" version="4.x">As well as allowing static values, the `acceptedFileTypes()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
+<UtilityInjection set="formFields">As well as allowing static values, the `acceptedFileTypes()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
 
 You may also use the `image()` method as shorthand to allow all image MIME types.
 
@@ -808,7 +807,7 @@ FileUpload::make('image')
     ->image()
 ```
 
-<AutoScreenshot name="forms/fields/file-upload/image-preview" alt="File upload with image preview" version="4.x" />
+<AutoScreenshot name="forms/fields/file-upload/image-preview" alt="File upload with image preview" />
 
 #### Custom MIME type mapping
 
@@ -828,7 +827,7 @@ FileUpload::make('designs')
     ]);
 ```
 
-<UtilityInjection set="formFields" version="4.x">As well as allowing static values, the `mimeTypeMap()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
+<UtilityInjection set="formFields">As well as allowing static values, the `mimeTypeMap()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
 
 ### File size validation
 
@@ -842,7 +841,7 @@ FileUpload::make('attachment')
     ->maxSize(1024)
 ```
 
-<UtilityInjection set="formFields" version="4.x">As well as allowing static values, the `minSize()` and `maxSize()` methods also accept functions to dynamically calculate them. You can inject various utilities into the functions as parameters.</UtilityInjection>
+<UtilityInjection set="formFields">As well as allowing static values, the `minSize()` and `maxSize()` methods also accept functions to dynamically calculate them. You can inject various utilities into the functions as parameters.</UtilityInjection>
 
 #### Uploading large files
 
@@ -936,7 +935,7 @@ FileUpload::make('banner')
     ->imageAspectRatio(['16:9', '4:3', '1:1'])
 ```
 
-<UtilityInjection set="formFields" version="4.x">As well as allowing a static value, the `imageAspectRatio()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
+<UtilityInjection set="formFields">As well as allowing a static value, the `imageAspectRatio()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
 
 You can also specify a range of acceptable aspect ratios using `Rule::dimensions()`:
 
@@ -970,4 +969,4 @@ FileUpload::make('attachments')
     ->maxFiles(5)
 ```
 
-<UtilityInjection set="formFields" version="4.x">As well as allowing static values, the `minFiles()` and `maxFiles()` methods also accept functions to dynamically calculate them. You can inject various utilities into the functions as parameters.</UtilityInjection>
+<UtilityInjection set="formFields">As well as allowing static values, the `minFiles()` and `maxFiles()` methods also accept functions to dynamically calculate them. You can inject various utilities into the functions as parameters.</UtilityInjection>

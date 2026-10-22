@@ -1,8 +1,6 @@
 ---
 title: Chart widgets
 ---
-import AutoScreenshot from "@components/AutoScreenshot.astro"
-import Aside from "@components/Aside.astro"
 
 ## Introduction
 
@@ -53,7 +51,7 @@ class BlogPostsChart extends ChartWidget
 
 Now, check out your widget in the dashboard.
 
-<AutoScreenshot name="widgets/chart/line" alt="Line chart" version="4.x" />
+<AutoScreenshot name="widgets/chart/line" alt="Line chart" />
 
 ## Available chart types
 
@@ -70,21 +68,21 @@ Below is a list of available chart widget classes which you may extend, and thei
 
 For example, you could use a bar chart by returning `'bar'` from the `getType()` method:
 
-<AutoScreenshot name="widgets/chart/bar" alt="Bar chart" version="4.x" />
+<AutoScreenshot name="widgets/chart/bar" alt="Bar chart" />
 
 Here are examples of the other available chart types:
 
-<AutoScreenshot name="widgets/chart/pie" alt="Pie chart" version="4.x" />
+<AutoScreenshot name="widgets/chart/pie" alt="Pie chart" />
 
-<AutoScreenshot name="widgets/chart/doughnut" alt="Doughnut chart" version="4.x" />
+<AutoScreenshot name="widgets/chart/doughnut" alt="Doughnut chart" />
 
-<AutoScreenshot name="widgets/chart/radar" alt="Radar chart" version="4.x" />
+<AutoScreenshot name="widgets/chart/radar" alt="Radar chart" />
 
-<AutoScreenshot name="widgets/chart/polar-area" alt="Polar area chart" version="4.x" />
+<AutoScreenshot name="widgets/chart/polar-area" alt="Polar area chart" />
 
-<AutoScreenshot name="widgets/chart/scatter" alt="Scatter chart" version="4.x" />
+<AutoScreenshot name="widgets/chart/scatter" alt="Scatter chart" />
 
-<AutoScreenshot name="widgets/chart/bubble" alt="Bubble chart" version="4.x" />
+<AutoScreenshot name="widgets/chart/bubble" alt="Bubble chart" />
 
 ## Customizing the chart color
 
@@ -182,7 +180,7 @@ protected function getData(): array
 }
 ```
 
-<AutoScreenshot name="widgets/chart/filter" alt="Chart with filter" version="4.x" />
+<AutoScreenshot name="widgets/chart/filter" alt="Chart with filter" />
 
 <Aside variant="danger">
     The `$filter` property is user-controllable. Although the `<select>` element only offers the keys returned from `getFilters()`, a crafted request can set `$this->filter` to any string, so it is not limited to those keys. You must ensure the value is valid before using it in a query — for example, by checking it against the keys of `getFilters()`, or by using a `match` expression with a safe default. Never interpolate `$this->filter` directly into a raw query.
@@ -233,7 +231,7 @@ protected function getData(): array
 
 The `$this->filters` array will always reflect the current form data. Please note that this data is not validated, as it is available live and not intended to be used for anything other than querying the database. You must ensure that the data is valid before using it.
 
-<AutoScreenshot name="widgets/chart/custom-filters" alt="Chart with custom filters" version="4.x" />
+<AutoScreenshot name="widgets/chart/custom-filters" alt="Chart with custom filters" />
 
 <Aside variant="info">
     If you want to add filters that apply to multiple widgets at once, see [filtering widget data](overview#filtering-widget-data) in the dashboard.
@@ -428,7 +426,7 @@ You may place a maximum height on the chart to ensure that it doesn't get too bi
 protected ?string $maxHeight = '300px';
 ```
 
-<AutoScreenshot name="widgets/chart/max-height" alt="Chart with maximum height" version="4.x" />
+<AutoScreenshot name="widgets/chart/max-height" alt="Chart with maximum height" />
 
 ## Setting chart configuration options
 
@@ -482,7 +480,7 @@ protected function getOptions(): RawJs
 
 ## Styling charts in a theme
 
-Chart.js paints a chart onto a `<canvas>`, so almost none of it can be reached from a stylesheet. A [custom theme](../styling/overview) is CSS only and cannot call `getOptions()`, so Filament exposes the parts of a chart that a theme is most likely to want to change as CSS custom properties. You may set them on `.fi-wi-chart`, or on any element above it to cover every chart in the panel at once:
+To style the canvas-rendered chart from a [custom theme](../styling/overview), set these CSS custom properties on `.fi-wi-chart` or a parent element:
 
 ```css
 .fi-wi-chart {
@@ -494,12 +492,16 @@ Chart.js paints a chart onto a `<canvas>`, so almost none of it can be reached f
 }
 ```
 
-`--chart-border-width` sets the thickness of the line that a chart draws around its data. `--chart-line-tension` curves the line of a line chart, from `0` for straight segments up to `1`. `--chart-point-radius` sizes the markers on a line, radar or scatter chart, and `--chart-point-style` shapes them, accepting any of Chart.js' point styles - `circle`, `cross`, `crossRot`, `dash`, `line`, `rect`, `rectRounded`, `rectRot`, `star` or `triangle` - as well as `none` to hide them entirely. `--chart-bar-border-radius` rounds the corners of the bars in a bar chart, which are already slightly rounded by default. Set it to `0` for square bars.
+- `--chart-border-width`: The thickness of the data outlines.
+- `--chart-line-tension`: The curvature of a line chart, from `0` for straight segments to `1`.
+- `--chart-point-radius`: The marker size for line, radar, and scatter charts.
+- `--chart-point-style`: The marker shape: `circle`, `cross`, `crossRot`, `dash`, `line`, `rect`, `rectRounded`, `rectRot`, `star`, or `triangle`. Use `none` to hide markers.
+- `--chart-bar-border-radius`: The corner radius of bars. Use `0` for square corners instead of the default rounded corners.
 
-These values are handed to Chart.js rather than used by the browser, so they are plain numbers and keywords, without units. If you set one to something Chart.js cannot use, it is ignored and the chart keeps its default. They are also read again whenever the color scheme changes, so you may give light and dark mode different values.
+Use unitless numbers and the supported keywords, not CSS lengths such as `3px`. You may set different values for light and dark mode.
 
 <Aside variant="info">
-    These properties are for styling every chart in a panel at once, which is what a theme usually wants. To change a single chart, use [`getOptions()`](#setting-chart-configuration-options) instead - anything you set there wins over the properties here.
+    To configure an individual chart, use [`getOptions()`](#setting-chart-configuration-options). Explicit options for these settings take precedence over the CSS custom properties.
 </Aside>
 
 ### Styling the chart legend
@@ -561,7 +563,7 @@ public function getDescription(): ?string
 }
 ```
 
-<AutoScreenshot name="widgets/chart/description" alt="Chart with description" version="4.x" />
+<AutoScreenshot name="widgets/chart/description" alt="Chart with description" />
 
 ## Disabling lazy loading
 
@@ -581,7 +583,7 @@ You may allow the chart to be collapsible by setting the `$isCollapsible` proper
 protected bool $isCollapsible = true;
 ```
 
-<AutoScreenshot name="widgets/chart/collapsible" alt="Collapsible chart" version="4.x" />
+<AutoScreenshot name="widgets/chart/collapsible" alt="Collapsible chart" />
 
 ## Providing an accessible alternative
 

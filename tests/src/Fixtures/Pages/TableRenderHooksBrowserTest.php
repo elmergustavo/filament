@@ -21,8 +21,16 @@ class TableRenderHooksBrowserTest extends Page implements HasTable
     {
         return $table
             ->query(Post::query())
+            ->loadingSkeleton()
             ->columns([
                 Tables\Columns\TextColumn::make('title'),
+                Tables\Columns\CheckboxColumn::make('published_checkbox')
+                    ->state(static fn (Post $record): bool => $record->is_published),
+                Tables\Columns\ToggleColumn::make('published_toggle')
+                    ->state(static fn (Post $record): bool => $record->is_published),
+            ])
+            ->recordActions([
+                Action::make('view'),
             ]);
     }
 

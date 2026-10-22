@@ -98,6 +98,10 @@ class Select extends Field implements Contracts\CanDisableOptions, Contracts\Has
 
     protected ?Model $cachedSelectedRecord = null;
 
+    protected mixed $cachedSelectedRecordState = null;
+
+    protected ?string $cachedSelectedRecordStatePath = null;
+
     protected bool | Closure $isMultiple = false;
 
     protected ?Closure $getOptionLabelUsing = null;
@@ -128,6 +132,8 @@ class Select extends Field implements Contracts\CanDisableOptions, Contracts\Has
     protected ?Closure $modifyRelationshipQueryUsing = null;
 
     protected bool $shouldIgnoreRelationshipRecord = false;
+
+    protected bool $isResolvingRelationshipForStateCasts = false;
 
     protected ?Collection $cachedRelationshipRecords = null;
 
@@ -1561,15 +1567,26 @@ class Select extends Field implements Contracts\CanDisableOptions, Contracts\Has
 
     public function getSelectedRecord(): ?Model
     {
-        if ($this->cachedSelectedRecord) {
+        $state = $this->getState();
+        $statePath = $this->getStatePath();
+
+        if (
+            $this->cachedSelectedRecord &&
+            ($this->cachedSelectedRecordState === $state) &&
+            ($this->cachedSelectedRecordStatePath === $statePath)
+        ) {
             return $this->cachedSelectedRecord;
         }
 
-        if (blank($this->getState())) {
-            return null;
+        if (blank($state)) {
+            return $this->cachedSelectedRecord = null;
         }
 
-        return $this->cachedSelectedRecord = $this->evaluate($this->getSelectedRecordUsing);
+        $this->cachedSelectedRecord = $this->evaluate($this->getSelectedRecordUsing);
+        $this->cachedSelectedRecordState = $state;
+        $this->cachedSelectedRecordStatePath = $statePath;
+
+        return $this->cachedSelectedRecord;
     }
 
     public function hasRelationship(): bool
@@ -1733,11 +1750,24 @@ class Select extends Field implements Contracts\CanDisableOptions, Contracts\Has
             return parent::getDefaultStateCasts();
         }
 
-        if ($this->isMultiple()) {
-            return [app(OptionsArrayStateCast::class)];
+        $shouldCastToInteger = true;
+
+        // Relationship name callbacks may read this field's state, so nested reads use the default cast.
+        if (! $this->isResolvingRelationshipForStateCasts) {
+            $this->isResolvingRelationshipForStateCasts = true;
+
+            try {
+                $shouldCastToInteger = (! $this->hasRelationship()) || ($this->getRelationship()->getRelated()->getKeyType() !== 'string');
+            } finally {
+                $this->isResolvingRelationshipForStateCasts = false;
+            }
         }
 
-        return [app(OptionStateCast::class, ['isNullable' => true])];
+        if ($this->isMultiple()) {
+            return [app(OptionsArrayStateCast::class, ['shouldCastToInteger' => $shouldCastToInteger])];
+        }
+
+        return [app(OptionStateCast::class, ['isNullable' => true, 'shouldCastToInteger' => $shouldCastToInteger])];
     }
 
     /**
@@ -1825,6 +1855,15 @@ class Select extends Field implements Contracts\CanDisableOptions, Contracts\Has
         return true;
     }
 
+    public function getRequiredDescription(): ?string
+    {
+        if ((! $this->isRequired()) || $this->isDisabled() || ($this->isNative() && (! $this->isSearchable()) && (! $this->isMultiple()) && (! $this->isHtmlAllowed()))) {
+            return null;
+        }
+
+        return __('filament-forms::components.select.required_description');
+    }
+
     public function toEmbeddedHtml(): string
     {
         $extraInputAttributeBag = $this->getExtraInputAttributeBag();
@@ -1905,9 +1944,7 @@ class Select extends Field implements Contracts\CanDisableOptions, Contracts\Has
                     >
                         <?php if ($canSelectPlaceholder) { ?>
                             <option value="">
-                                <?php if (! $isDisabled) { ?>
-                                    <?= e($this->getPlaceholder()) ?>
-                                <?php } ?>
+                                <?= e($this->getPlaceholder()) ?>
                             </option>
                         <?php } ?>
 
@@ -1935,9 +1972,21 @@ class Select extends Field implements Contracts\CanDisableOptions, Contracts\Has
                     </select>
                 <?php } else { ?>
                     <?php $options = $this->getOptions(); ?>
+                    <?php
+                    $accessibilityAttributes = [
+                        ...$this->getAccessibilityAttributes(),
+                        'aria-required' => ($isRequired && (! $isDisabled)) ? 'true' : null,
+                        ...$extraInputAttributeBag->only(['aria-label', 'aria-labelledby', 'aria-describedby', 'aria-invalid', 'aria-busy', 'aria-required'])->getAttributes(),
+                    ];
+                    $accessibilityAttributes['aria-describedby'] = implode(' ', array_unique([
+                        ...$this->getDescriptionIds(),
+                        ...preg_split('/\s+/', trim($extraInputAttributeBag->get('aria-describedby') ?? ''), flags: PREG_SPLIT_NO_EMPTY),
+                    ])) ?: null;
+                    ?>
 
                     <div
                         class="fi-hidden"
+                        data-select-accessibility="<?= e(Js::encode($accessibilityAttributes)) ?>"
                         x-data="{
                             isDisabled: <?= Js::from($isDisabled) ?>,
                             init() {
@@ -1957,6 +2006,7 @@ class Select extends Field implements Contracts\CanDisableOptions, Contracts\Has
                                     canOptionLabelsWrap: <?= Js::from($canOptionLabelsWrap) ?>,
                                     canSelectPlaceholder: <?= Js::from($canSelectPlaceholder) ?>,
                                     clearButtonLabel: <?= Js::from(__('filament-forms::components.select.actions.clear.label')) ?>,
+                                    errorMessage: <?= Js::from(__('filament-forms::components.select.error_message')) ?>,
                                     getOptionLabelUsing: async () => {
                                         return await $wire.callSchemaComponentMethod(<?= Js::from($key) ?>, 'getOptionLabel')
                                     },
@@ -1966,16 +2016,18 @@ class Select extends Field implements Contracts\CanDisableOptions, Contracts\Has
                                             'getOptionLabelsForJs',
                                         )
                                     },
-                                    getOptionsUsing: async () => {
-                                        return await $wire.callSchemaComponentMethod(
-                                            <?= Js::from($key) ?>,
-                                            'getOptionsForJs',
+                                    getOptionsUsing: async (request) => {
+                                        return await request(
+                                            $wire,
+                                            'callSchemaComponentMethod',
+                                            [<?= Js::from($key) ?>, 'getOptionsForJs'],
                                         )
                                     },
-                                    getSearchResultsUsing: async (search) => {
-                                        return await $wire.callSchemaComponentMethod(
-                                            <?= Js::from($key) ?>,
-                                            'getSearchResultsForJs',
+                                    getSearchResultsUsing: async (search, request) => {
+                                        return await request(
+                                            $wire,
+                                            'callSchemaComponentMethod',
+                                            [<?= Js::from($key) ?>, 'getSearchResultsForJs'],
                                             { search },
                                         )
                                     },
@@ -2013,8 +2065,6 @@ class Select extends Field implements Contracts\CanDisableOptions, Contracts\Has
                                 })"
                         wire:ignore
                         wire:key="<?= e($livewireKey) ?>.<?= substr(md5(serialize([$isDisabled, $isReorderable])), 0, 64) ?>"
-                        x-on:dropdown-escape="select.closeDropdown()"
-                        x-on:keydown.esc="select.dropdown.isActive && $event.stopPropagation()"
                         x-on:set-select-property="$event.detail.isDisabled ? select.disable() : select.enable()"
                         <?= (new FilamentComponentAttributeBag)
                             ->merge($this->getExtraAlpineAttributes(), escape: false)

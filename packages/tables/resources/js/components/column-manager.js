@@ -10,9 +10,60 @@ export default function filamentTableColumnManager({ columns, isLive }) {
 
         isLive,
 
+        removeApplyCommitHook: null,
+
+        dropdownPanel: null,
+
+        dropdownOpenedListener: null,
+
+        dropdownRevision: 0,
+
+        applyDropdownRevision: 0,
+
         hasReordered: false,
 
+        reorderAnnouncement: '',
+
+        focusRevision: 0,
+
         init() {
+            this.dropdownPanel = this.$el.closest('.fi-dropdown-panel')
+            this.dropdownOpenedListener = () => this.dropdownRevision++
+            this.dropdownPanel?.addEventListener(
+                'dropdown-opened',
+                this.dropdownOpenedListener,
+            )
+
+            this.removeApplyCommitHook = this.$wire.$hook(
+                'commit',
+                ({ commit, succeed, fail }) => {
+                    if (
+                        !commit.calls.some(
+                            (call) => call.method === 'applyTableColumnManager',
+                        )
+                    )
+                        return
+
+                    const dropdownRevision = this.applyDropdownRevision
+
+                    // Livewire 3 does not reject method-call promises on request failure.
+                    fail(() => {
+                        this.error = 'Failed to update column visibility'
+                        this.isLoading = false
+                    })
+                    succeed(() =>
+                        requestAnimationFrame(() => {
+                            if (
+                                !this.isLive &&
+                                this.dropdownRevision === dropdownRevision
+                            ) {
+                                this.closeDropdown()
+                            }
+                        }),
+                    )
+                },
+            )
+
             if (!this.columns || this.columns.length === 0) {
                 this.columns = []
 
@@ -152,7 +203,7 @@ export default function filamentTableColumnManager({ columns, isLive }) {
             this.hasReordered = true
 
             if (this.isLive) {
-                this.applyTableColumnManager()
+                return this.applyTableColumnManager()
             }
         },
 
@@ -184,8 +235,115 @@ export default function filamentTableColumnManager({ columns, isLive }) {
             this.hasReordered = true
 
             if (this.isLive) {
-                this.applyTableColumnManager()
+                return this.applyTableColumnManager()
             }
+        },
+
+        getVisibleColumns(groupName = null) {
+            const columns =
+                groupName === null
+                    ? this.deferredColumns
+                    : (this.deferredColumns.find(
+                          (column) =>
+                              column.type === 'group' &&
+                              column.name === groupName,
+                      )?.columns ?? [])
+
+            return columns.filter((column) => !column.isHidden && column.label)
+        },
+
+        getColumnLabel(column) {
+            const element = document.createElement('span')
+            element.innerHTML = column.label
+
+            return element.textContent
+        },
+
+        getColumnPosition(column, groupName = null) {
+            return (
+                this.getVisibleColumns(groupName).findIndex(
+                    (item) =>
+                        item.type === column.type && item.name === column.name,
+                ) + 1
+            )
+        },
+
+        canMoveColumn(column, direction, groupName = null) {
+            const position = this.getColumnPosition(column, groupName)
+
+            return (
+                position > 0 &&
+                (direction === 'up'
+                    ? position > 1
+                    : position < this.getVisibleColumns(groupName).length)
+            )
+        },
+
+        async moveColumn(column, direction, groupName, button, announcement) {
+            if (
+                this.isLoading ||
+                !this.canMoveColumn(column, direction, groupName)
+            ) {
+                return
+            }
+
+            const columns = this.getVisibleColumns(groupName)
+            const index = this.getColumnPosition(column, groupName) - 1
+            const nextIndex = index + (direction === 'up' ? -1 : 1)
+            ;[columns[index], columns[nextIndex]] = [
+                columns[nextIndex],
+                columns[index],
+            ]
+
+            const hadFocus = document.activeElement === button
+            const focusRevision = this.focusRevision
+            const controls = button.parentElement
+            const sortedIds = columns.map(
+                (column) => `${column.type}::${column.name}`,
+            )
+            this.reorderAnnouncement = ''
+
+            const applied =
+                groupName === null
+                    ? this.reorderColumns(sortedIds)
+                    : this.reorderGroupColumns(sortedIds, groupName)
+
+            this.$nextTick(() => {
+                if (
+                    !hadFocus ||
+                    this.focusRevision !== focusRevision ||
+                    !controls.getClientRects().length ||
+                    (document.activeElement !== button &&
+                        document.activeElement !== document.body)
+                ) {
+                    return
+                }
+
+                if (button.disabled) {
+                    controls.querySelector('button:not(:disabled)')?.focus()
+                } else {
+                    button.focus()
+                }
+            })
+
+            if (this.isLive && !(await applied)) {
+                return
+            }
+
+            if (this.getColumnPosition(column, groupName) !== nextIndex + 1) {
+                return
+            }
+
+            this.reorderAnnouncement = announcement
+                .replace(':column', this.getColumnLabel(column))
+                .replace(':position', nextIndex + 1)
+                .replace(':count', columns.length)
+                .replace(
+                    ':group',
+                    groupName === null
+                        ? ''
+                        : this.getColumnLabel({ label: groupName }),
+                )
         },
 
         reorderTopLevel(newOrder) {
@@ -211,6 +369,7 @@ export default function filamentTableColumnManager({ columns, isLive }) {
         },
 
         async applyTableColumnManager() {
+            this.applyDropdownRevision = this.dropdownRevision
             this.isLoading = true
 
             try {
@@ -224,18 +383,55 @@ export default function filamentTableColumnManager({ columns, isLive }) {
 
                 this.hasReordered = false
                 this.error = undefined
+
+                return true
             } catch (error) {
                 this.error = 'Failed to update column visibility'
 
                 console.error('Table toggle columns error:', error)
+
+                return false
             } finally {
                 this.isLoading = false
+            }
+        },
+
+        closeDropdown() {
+            const panel = this.dropdownPanel
+
+            if (
+                !this.$el.isConnected ||
+                this.$el.closest('.fi-dropdown-panel') !== panel ||
+                panel?.style.display !== 'block'
+            ) {
+                return
+            }
+
+            const dropdown = window.Alpine.$data(panel.closest('.fi-dropdown'))
+            const shouldFocusTrigger =
+                document.activeElement === document.body ||
+                panel.contains(document.activeElement)
+
+            dropdown?.close()
+
+            if (shouldFocusTrigger) {
+                dropdown?.getTrigger()?.focus()
             }
         },
 
         resetDeferredColumns() {
             this.deferredColumns = JSON.parse(JSON.stringify(this.columns))
             this.hasReordered = false
+            this.reorderAnnouncement = ''
+        },
+
+        destroy() {
+            this.dropdownRevision++
+            this.removeApplyCommitHook?.()
+            this.dropdownPanel?.removeEventListener(
+                'dropdown-opened',
+                this.dropdownOpenedListener,
+            )
         },
     }
 }

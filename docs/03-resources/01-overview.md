@@ -1,14 +1,12 @@
 ---
 title: Overview
 ---
-import AutoScreenshot from "@components/AutoScreenshot.astro"
-import Aside from "@components/Aside.astro"
 
 ## Introduction
 
 Resources are static classes that are used to build CRUD interfaces for your Eloquent models. They describe how administrators should be able to interact with data from your app using tables and forms.
 
-<AutoScreenshot name="panels/resources/listing" alt="A resource listing page" version="4.x" />
+<AutoScreenshot name="panels/resources/listing" alt="A resource listing page" />
 
 ## Creating a resource
 
@@ -56,9 +54,9 @@ Your resource will have a "Manage" page, which is a List page with modals added.
 
 Additionally, your simple resource will have no `getRelations()` method, as [relation managers](managing-relationships) are only displayed on the Edit and View pages, which are not present in simple resources. Everything else is the same.
 
-<AutoScreenshot name="panels/resources/simple-modal-create" alt="Simple (modal) resource create modal" version="4.x" />
+<AutoScreenshot name="panels/resources/simple-modal-create" alt="Simple (modal) resource create modal" />
 
-<AutoScreenshot name="panels/resources/simple-modal-edit" alt="Simple (modal) resource edit modal" version="4.x" />
+<AutoScreenshot name="panels/resources/simple-modal-edit" alt="Simple (modal) resource edit modal" />
 
 ### Automatically generating forms and tables
 
@@ -155,7 +153,7 @@ public static function configure(Schema $schema): Schema
 }
 ```
 
-The `components()` method is used to define the structure of your form. It is an array of [fields](../forms/overview#available-fields) and [layout components](../schemas/layouts#available-layout-components), in the order they should appear in your form.
+The `components()` method is used to define the structure of your form. It is an array of [fields](../forms/overview#form-fields) and [layout components](../schemas/layouts#basic-layout-components), in the order they should appear in your form.
 
 Check out the Forms docs for a [guide](../forms) on how to build forms with Filament.
 
@@ -346,7 +344,7 @@ protected static bool $hasTitleCaseModelLabel = false;
 
 ## Resource navigation items
 
-Filament will automatically generate a navigation menu item for your resource using the [plural label](#plural-label).
+Filament will automatically generate a navigation menu item for your resource using the [plural label](#customizing-the-plural-model-label).
 
 If you'd like to customize the navigation item label, you may use the `$navigationLabel` property:
 
@@ -362,6 +360,8 @@ public static function getNavigationLabel(): string
     return __('filament/resources/customer.navigation_label');
 }
 ```
+
+You may also [render HTML in the navigation label](../navigation/overview#rendering-html-in-navigation-item-labels) by returning an `Htmlable` object.
 
 ### Setting a resource navigation icon
 
@@ -611,7 +611,7 @@ public static function getRecordSubNavigation(Page $page): array
 
 Each item in the sub-navigation can be customized using the [same navigation methods as normal pages](../navigation).
 
-<AutoScreenshot name="panels/resources/sub-navigation" alt="Resource with sub-navigation" version="4.x" />
+<AutoScreenshot name="panels/resources/sub-navigation" alt="Resource with sub-navigation" />
 
 <Aside variant="tip">
     If you're looking to add sub-navigation to switch *between* entire resources and [custom pages](../navigation/custom-pages), you might be looking for [clusters](../navigation/clusters), which are used to group these together. The `getRecordSubNavigation()` method is intended to construct a navigation between pages that relate to a particular record *inside* a resource.
@@ -627,11 +627,11 @@ use Filament\Pages\Enums\SubNavigationPosition;
 protected static ?SubNavigationPosition $subNavigationPosition = SubNavigationPosition::End;
 ```
 
-<AutoScreenshot name="panels/resources/sub-navigation-end" alt="Resource with end sub-navigation position" version="4.x" />
+<AutoScreenshot name="panels/resources/sub-navigation-end" alt="Resource with end sub-navigation position" />
 
 The `SubNavigationPosition::Top` option renders the sub-navigation as tabs above the page content:
 
-<AutoScreenshot name="panels/resources/sub-navigation-top" alt="Resource with top sub-navigation position" version="4.x" />
+<AutoScreenshot name="panels/resources/sub-navigation-top" alt="Resource with top sub-navigation position" />
 
 ## Deleting resource pages
 
@@ -664,7 +664,11 @@ For authorization, Filament will observe any [model policies](https://laravel.co
 - `delete()` is used to prevent a single record from being deleted. `deleteAny()` is used to prevent records from being bulk deleted. Filament uses the `deleteAny()` method because iterating through multiple records and checking the `delete()` policy is not very performant. When using a `DeleteBulkAction`, if you want to call the `delete()` method for each record anyway, you should use the `DeleteBulkAction::make()->authorizeIndividualRecords()` method. Any records that fail the authorization check will not be processed.
 - `forceDelete()` is used to prevent a single soft-deleted record from being force-deleted. `forceDeleteAny()` is used to prevent records from being bulk force-deleted. Filament uses the `forceDeleteAny()` method because iterating through multiple records and checking the `forceDelete()` policy is not very performant. When using a `ForceDeleteBulkAction`, if you want to call the `forceDelete()` method for each record anyway, you should use the `ForceDeleteBulkAction::make()->authorizeIndividualRecords()` method. Any records that fail the authorization check will not be processed.
 - `restore()` is used to prevent a single soft-deleted record from being restored. `restoreAny()` is used to prevent records from being bulk restored. Filament uses the `restoreAny()` method because iterating through multiple records and checking the `restore()` policy is not very performant. When using a `RestoreBulkAction`, if you want to call the `restore()` method for each record anyway, you should use the `RestoreBulkAction::make()->authorizeIndividualRecords()` method. Any records that fail the authorization check will not be processed.
-- `reorder()` is used to control [reordering records in a table](listing-records#reordering-records).
+- `reorder()` is used to control [reordering records in a table](../tables/overview#reordering-records).
+
+<Aside variant="warning">
+    By default, Filament allows an operation when its model policy or policy method is missing, unless a Gate before callback denies it. Define the required policy methods, or enable [strict authorization](../panel-configuration#strict-authorization-mode) to detect missing policies and methods. `viewAny()` controls resource access, not which records appear in its table: add query restrictions for records the user must not see. Custom actions and inline editable columns need their own authorization, even in strict mode. See the [security overview](../advanced/security#authorization) for these boundaries.
+</Aside>
 
 <Aside variant="info">
     On every Livewire request, Filament re-queries the page's `$record` using the resource query, then repeats the page's authorization checks. For example, edit and view pages check the resource's `update()` and `view()` policies. A `ManageRelatedRecords` page checks access to the related resource or model, but does not authorize the owner record unless you add that check to the page's `canAccess()` method. Any global scopes removed by the resource query remain removed. Filament does not re-query or authorize additional model properties that you add to the page. See [Eloquent model restoration in Livewire](../advanced/security#understanding-eloquent-model-restoration-in-livewire) for more information.
@@ -677,6 +681,10 @@ If you'd like to skip authorization for a resource, you may set the `$shouldSkip
 ```php
 protected static bool $shouldSkipAuthorization = true;
 ```
+
+<Aside variant="danger">
+    This bypasses the resource's policy checks, including in strict authorization mode. Panel authentication and tenant scoping do not replace operation-level authorization. Only skip these checks if you enforce equivalent authorization yourself.
+</Aside>
 
 ### Protecting model attributes
 

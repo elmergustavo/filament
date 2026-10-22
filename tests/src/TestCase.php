@@ -41,6 +41,7 @@ use Filament\Tests\Fixtures\Providers\UserMenuGroupingPanelProvider;
 use Filament\Tests\Fixtures\Providers\UserMenuLogoutPlacementPanelProvider;
 use Filament\Tests\Fixtures\Providers\ViewComponentsServiceProvider;
 use Filament\Widgets\WidgetsServiceProvider;
+use Illuminate\Database\Connectors\SqlServerConnector;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Gate;
 use Kirschbaum\PowerJoins\PowerJoinsServiceProvider;
@@ -173,10 +174,16 @@ abstract class TestCase extends BaseTestCase
             __DIR__ . '/../resources/views',
         ]);
 
-        // Paratest sets TEST_TOKEN for each worker (0, 1, 2, etc.)
+        // Paratest sets `TEST_TOKEN` for each worker (0, 1, 2, etc.).
         $testToken = env('TEST_TOKEN', '');
-        $dbSuffix = $testToken !== '' ? "_{$testToken}" : '';
-        $dbName = env('DB_DATABASE', 'testing') . $dbSuffix;
+
+        // Laravel 11 writes inline Blade views and compiled PHP non-atomically.
+        if ($testToken !== '') {
+            $app['config']->set('view.compiled', $app['config']->get('view.compiled') . '/worker-' . $testToken);
+        }
+
+        $databaseSuffix = $testToken !== '' ? "_{$testToken}" : '';
+        $databaseName = env('DB_DATABASE', 'testing') . $databaseSuffix;
 
         $app['config']->set('database.connections.sqlite', [
             'driver' => 'sqlite',
@@ -189,7 +196,7 @@ abstract class TestCase extends BaseTestCase
             'driver' => 'mysql',
             'host' => env('DB_HOST', '127.0.0.1'),
             'port' => env('MYSQL_PORT', env('DB_PORT', '3306')),
-            'database' => $dbName,
+            'database' => $databaseName,
             'username' => env('MYSQL_USERNAME', env('DB_USERNAME', 'root')),
             'password' => env('MYSQL_PASSWORD', env('DB_PASSWORD', '')),
             'charset' => 'utf8mb4',
@@ -208,7 +215,7 @@ abstract class TestCase extends BaseTestCase
             'driver' => 'pgsql',
             'host' => env('DB_HOST', '127.0.0.1'),
             'port' => env('PGSQL_PORT', env('DB_PORT', '5432')),
-            'database' => $dbName,
+            'database' => $databaseName,
             'username' => env('PGSQL_USERNAME', env('DB_USERNAME', 'postgres')),
             'password' => env('PGSQL_PASSWORD', env('DB_PASSWORD', '')),
             'charset' => 'utf8',
@@ -221,38 +228,62 @@ abstract class TestCase extends BaseTestCase
             ],
         ]);
 
+        $app['config']->set('database.connections.sqlsrv', [
+            'driver' => 'sqlsrv',
+            'host' => env('DB_HOST', '127.0.0.1'),
+            'port' => env('SQLSRV_PORT', env('DB_PORT', '1433')),
+            'database' => $databaseName,
+            'username' => env('SQLSRV_USERNAME', env('DB_USERNAME', 'sa')),
+            'password' => env('SQLSRV_PASSWORD', env('DB_PASSWORD', '')),
+            'charset' => 'utf8',
+            'prefix' => '',
+            'encrypt' => env('SQLSRV_ENCRYPT', 'yes'),
+            'trust_server_certificate' => env('SQLSRV_TRUST_SERVER_CERTIFICATE', true),
+        ]);
+
         $connection = env('DB_CONNECTION', 'testing');
 
-        // Auto-create test databases for MySQL/PostgreSQL parallel workers
-        if ($dbSuffix !== '' && in_array($connection, ['mysql', 'pgsql'])) {
-            $this->ensureDatabaseExists($connection, $dbName, $app['config']->get("database.connections.{$connection}"));
+        // Auto-create test databases for parallel workers, including the initial SQL Server database.
+        if ((($databaseSuffix !== '') && in_array($connection, ['mysql', 'pgsql'])) || ($connection === 'sqlsrv')) {
+            $this->ensureDatabaseExists($connection, $databaseName, $app['config']->get("database.connections.{$connection}"));
         }
 
         $app['config']->set('database.default', $connection);
         $app['config']->set('database.connections.testing', $app['config']->get('database.connections.sqlite'));
     }
 
-    protected function ensureDatabaseExists(string $driver, string $dbName, array $config): void
+    protected function ensureDatabaseExists(string $driver, string $databaseName, array $configuration): void
     {
         try {
             if ($driver === 'mysql') {
                 $pdo = new PDO(
-                    "mysql:host={$config['host']};port={$config['port']}",
-                    $config['username'],
-                    $config['password'],
-                    $config['options']
+                    "mysql:host={$configuration['host']};port={$configuration['port']}",
+                    $configuration['username'],
+                    $configuration['password'],
+                    $configuration['options']
                 );
-                $pdo->exec("create database if not exists `{$dbName}` character set {$config['charset']} collate {$config['collation']}");
+                $pdo->exec("create database if not exists `{$databaseName}` character set {$configuration['charset']} collate {$configuration['collation']}");
             } elseif ($driver === 'pgsql') {
                 $pdo = new PDO(
-                    "pgsql:host={$config['host']};port={$config['port']};dbname=postgres",
-                    $config['username'],
-                    $config['password'],
-                    $config['options']
+                    "pgsql:host={$configuration['host']};port={$configuration['port']};dbname=postgres",
+                    $configuration['username'],
+                    $configuration['password'],
+                    $configuration['options']
                 );
-                $result = $pdo->query("select 1 from pg_database where datname = '{$dbName}'");
+                $result = $pdo->query("select 1 from pg_database where datname = '{$databaseName}'");
                 if ($result->fetchColumn() === false) {
-                    $pdo->exec("create database \"{$dbName}\"");
+                    $pdo->exec("create database \"{$databaseName}\"");
+                }
+            } elseif ($driver === 'sqlsrv') {
+                $pdo = app(SqlServerConnector::class)->connect([
+                    ...$configuration,
+                    'database' => 'master',
+                ]);
+                $statement = $pdo->prepare('select DB_ID(?)');
+                $statement->execute([$databaseName]);
+
+                if ($statement->fetchColumn() === null) {
+                    $pdo->exec('create database [' . str_replace(']', ']]', $databaseName) . ']');
                 }
             }
         } catch (PDOException) {

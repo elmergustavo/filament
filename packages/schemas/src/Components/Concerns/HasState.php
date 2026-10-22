@@ -9,6 +9,7 @@ use Filament\Schemas\Components\Component;
 use Filament\Schemas\Components\StateCasts\Contracts\StateCast;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
+use Filament\Schemas\Schema;
 use Illuminate\Contracts\Support\Arrayable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Arr;
@@ -67,6 +68,11 @@ trait HasState
     protected bool $hasConstantState = false;
 
     protected string | Closure | null $separator = null;
+
+    /**
+     * @var array<Model>
+     */
+    protected array $relatedRecords = [];
 
     protected bool | Closure $isDistinctList = false;
 
@@ -394,13 +400,36 @@ trait HasState
             $container = $parentContainer;
         }
 
-        foreach ($container->getFlatComponents(withActions: false, withHidden: true) as $component) {
+        return $this->searchOtherComponentWithStatePath($container, $statePath);
+    }
+
+    protected function searchOtherComponentWithStatePath(Schema $container, string $statePath, bool &$hasPassedThisComponent = false): bool
+    {
+        foreach ($container->getComponents(withActions: false, withHidden: true) as $component) {
             if ($component === $this) {
+                $hasPassedThisComponent = true;
+
                 continue;
             }
 
-            if ($component->hasStatePath() && $component->getStatePath() === $statePath) {
+            $componentStatePath = $component->getStatePath();
+
+            if (
+                $component->hasStatePath() &&
+                ($componentStatePath === $statePath) &&
+                ($hasPassedThisComponent || ($component->getKey() !== $this->getKey()))
+            ) {
                 return true;
+            }
+
+            if (filled($componentStatePath) && (! str_starts_with($statePath, "{$componentStatePath}."))) {
+                continue;
+            }
+
+            foreach ($container->getChildSchemasForStatePathSearch($component) as $childSchema) {
+                if ($this->searchOtherComponentWithStatePath($childSchema, $statePath, $hasPassedThisComponent)) {
+                    return true;
+                }
             }
         }
 
@@ -978,6 +1007,8 @@ trait HasState
      */
     public function getConstantState(): mixed
     {
+        $this->relatedRecords = [];
+
         if ($this->hasConstantState) {
             $state = $this->evaluate($this->getConstantStateUsing);
         } else {
@@ -1055,14 +1086,22 @@ trait HasState
      */
     public function getConstantStateFromRecord(Model $record): mixed
     {
+        $this->relatedRecords = [];
+
         $relationship = $this->getStateRelationship($record);
 
         if ($relationship) {
-            $relationshipAttribute = $this->getStateRelationshipAttribute();
+            $relationshipAttribute = $this->getStateRelationshipAttribute(record: $record);
+            $relatedRecords = [];
+            $relationshipResults = $this->getStateRelationshipResults($record);
 
-            $state = collect($this->getStateRelationshipResults($record))
+            if ((count($relationshipResults) === 1) && (! $this->hasMultipleStateRelationship($record))) {
+                $this->relatedRecords = [reset($relationshipResults)];
+            }
+
+            $state = collect($relationshipResults)
                 ->reduce(
-                    function (Collection $carry, Model $record) use ($relationshipAttribute): Collection {
+                    function (Collection $carry, Model $record) use (&$relatedRecords, $relationshipAttribute): Collection {
                         if (
                             ($record instanceof HasRichContent) &&
                             $record->hasRichContentAttribute($relationshipAttribute)
@@ -1076,16 +1115,28 @@ trait HasState
                             return $carry;
                         }
 
+                        $relatedRecords[] = $record;
+
                         return $carry->push($state);
                     },
                     initial: collect(),
                 )
-                ->when($this->isDistinctList(), fn (Collection $state) => $state->unique())
+                ->when(
+                    $this->isDistinctList(),
+                    function (Collection $state) use (&$relatedRecords): Collection {
+                        $uniqueStateKeys = $state->unique()->keys();
+                        $relatedRecords = Arr::only($relatedRecords, $uniqueStateKeys->all());
+
+                        return $state->only($uniqueStateKeys);
+                    },
+                )
                 ->values();
 
             if (! $state->count()) {
                 return null;
             }
+
+            $this->relatedRecords = array_values($relatedRecords);
 
             if (($state->count() < 2) && (! $this->hasMultipleStateRelationship($record))) {
                 return $state->first();

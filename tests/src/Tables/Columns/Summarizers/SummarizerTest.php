@@ -8,6 +8,8 @@ use Filament\Tables\Columns\Summarizers\Summarizer;
 use Filament\Tables\Columns\Summarizers\Values;
 use Filament\Tests\Fixtures\Models\Post;
 use Filament\Tests\TestCase;
+use Illuminate\Database\Query\Builder;
+use Illuminate\Database\SqlServerConnection;
 
 uses(TestCase::class);
 
@@ -44,6 +46,12 @@ describe('`Summarizer` base class', function (): void {
         expect($summarizer)->toBeInstanceOf(Summarizer::class);
     });
 
+    it('returns `null` from `getSelectedState()` by default', function (): void {
+        $summarizer = Summarizer::make();
+
+        expect($summarizer->getSelectedState())->toBeNull();
+    });
+
     it('can set `selectedState()`', function (): void {
         $summarizer = Summarizer::make()
             ->selectedState(['key' => 'value']);
@@ -64,27 +72,38 @@ describe('`Summarizer` base class', function (): void {
 
         expect($summarizer->getSelectStatements('rating'))->toBe([]);
     });
-
-    it('returns `null` from `getSelectedState()` by default', function (): void {
-        $summarizer = Summarizer::make();
-
-        expect($summarizer->getSelectedState())->toBeNull();
-    });
 });
 
 describe('`Average` summarizer', function (): void {
     it('can be constructed with `make()`', function (): void {
-        $avg = Average::make();
+        $average = Average::make();
 
-        expect($avg)->toBeInstanceOf(Average::class);
-        expect($avg)->toBeInstanceOf(Summarizer::class);
+        expect($average)->toBeInstanceOf(Average::class);
+        expect($average)->toBeInstanceOf(Summarizer::class);
     });
 
     it('can set an ID', function (): void {
-        $avg = Average::make('avg-rating');
+        $average = Average::make('avg-rating');
 
-        expect($avg->getId())->toBe('avg-rating');
+        expect($average->getId())->toBe('avg-rating');
     });
+
+    it('rejects SQL Server `distinct()` combined with unions or `having()` in a summary query', function (string $method, bool | array $distinct): void {
+        $connection = app(SqlServerConnection::class, [
+            'pdo' => static fn () => throw new RuntimeException('No database connection is needed to reject this query.'),
+        ]);
+        $query = $connection->query()->from('amounts')
+            ->beforeQuery(static fn (Builder $query): Builder => $query->distinct($distinct));
+
+        if ($method === 'having') {
+            $query->groupBy('amount')->having('amount', '>', 0);
+        } else {
+            $query->{$method}($connection->query()->from('other_amounts'));
+        }
+
+        expect(fn () => Average::make()->summarize($query, 'amount'))
+            ->toThrow(LogicException::class, 'SQL Server average summaries do not support combining distinct()');
+    })->with(['union', 'unionAll', 'having'])->with([[true], [['amount']]]);
 });
 
 describe('`Count` summarizer', function (): void {

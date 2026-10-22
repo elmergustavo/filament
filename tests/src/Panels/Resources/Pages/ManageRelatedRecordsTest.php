@@ -11,12 +11,16 @@ use Filament\Actions\RestoreAction;
 use Filament\Actions\RestoreBulkAction;
 use Filament\Actions\Testing\TestAction;
 use Filament\Actions\ViewAction;
+use Filament\Tables\Table;
 use Filament\Tests\Fixtures\Models\Department;
+use Filament\Tests\Fixtures\Models\Post;
 use Filament\Tests\Fixtures\Models\Ticket;
+use Filament\Tests\Fixtures\Models\User;
 use Filament\Tests\Fixtures\Policies\DepartmentPolicy;
 use Filament\Tests\Fixtures\Policies\TicketPolicy;
 use Filament\Tests\Fixtures\Resources\Tickets\Pages\ManageTicketDepartments;
 use Filament\Tests\Fixtures\Resources\Tickets\TicketResource;
+use Filament\Tests\Fixtures\Resources\Users\Pages\ManageUserPosts;
 use Filament\Tests\Panels\Resources\TestCase;
 use Illuminate\Auth\Access\Response;
 
@@ -41,113 +45,125 @@ it('can list departments', function (): void {
         ->assertCanSeeTableRecords($ticket->departments);
 });
 
-it('can render page if the policy viewAny returns true', function (): void {
-    app()->bind(TicketPolicy::class . '::viewAny', fn (): bool => true);
+it('uses a fluent `recordTitleAttribute()` override with a nested related resource', function (): void {
+    $user = User::factory()->create();
+    $post = Post::factory()->for($user, 'author')->create(['title' => 'Contextual post']);
 
-    $ticket = Ticket::factory()
-        ->create();
+    $component = livewire(ManageUserPostsWithRecordTitle::class, ['record' => $user->getKey()])
+        ->assertCanSeeTableRecords([$post]);
 
-    $this->get(TicketResource::getUrl('departments', ['record' => $ticket]))
-        ->assertSuccessful();
+    expect($component->instance()->getTable()->getRecordTitle($post))->toBe('Contextual post');
 });
 
-it('can render page if the policy viewAny returns an allowed response', function (): void {
-    app()->bind(TicketPolicy::class . '::viewAny', fn (): Response => Response::allow());
+describe('authorization', function (): void {
+    it('can render page if the policy `viewAny()` returns `true`', function (): void {
+        app()->bind(TicketPolicy::class . '::viewAny', fn (): bool => true);
 
-    $ticket = Ticket::factory()
-        ->create();
+        $ticket = Ticket::factory()
+            ->create();
 
-    $this->get(TicketResource::getUrl('departments', ['record' => $ticket]))
-        ->assertSuccessful();
+        $this->get(TicketResource::getUrl('departments', ['record' => $ticket]))
+            ->assertSuccessful();
+    });
 
-    app()->bind(TicketPolicy::class . '::viewAny', fn (): bool => true);
-});
+    it('can render page if the policy `viewAny()` returns an allowed response', function (): void {
+        app()->bind(TicketPolicy::class . '::viewAny', fn (): Response => Response::allow());
 
-it('does not render page if the policy viewAny returns false', function (): void {
-    app()->bind(TicketPolicy::class . '::viewAny', fn (): bool => false);
+        $ticket = Ticket::factory()
+            ->create();
 
-    $ticket = Ticket::factory()
-        ->create();
+        $this->get(TicketResource::getUrl('departments', ['record' => $ticket]))
+            ->assertSuccessful();
 
-    $this->get(TicketResource::getUrl('departments', ['record' => $ticket]))
-        ->assertForbidden();
+        app()->bind(TicketPolicy::class . '::viewAny', fn (): bool => true);
+    });
 
-    app()->bind(TicketPolicy::class . '::viewAny', fn (): bool => true);
-});
+    it('does not render page if the policy `viewAny()` returns `false`', function (): void {
+        app()->bind(TicketPolicy::class . '::viewAny', fn (): bool => false);
 
-it('does not render page if the policy viewAny returns a denied response', function (): void {
-    app()->bind(TicketPolicy::class . '::viewAny', fn (): Response => Response::deny());
+        $ticket = Ticket::factory()
+            ->create();
 
-    $ticket = Ticket::factory()
-        ->create();
+        $this->get(TicketResource::getUrl('departments', ['record' => $ticket]))
+            ->assertForbidden();
 
-    $this->get(TicketResource::getUrl('departments', ['record' => $ticket]))
-        ->assertForbidden();
+        app()->bind(TicketPolicy::class . '::viewAny', fn (): bool => true);
+    });
 
-    app()->bind(TicketPolicy::class . '::viewAny', fn (): bool => true);
-});
+    it('does not render page if the policy `viewAny()` returns a denied response', function (): void {
+        app()->bind(TicketPolicy::class . '::viewAny', fn (): Response => Response::deny());
 
-it('can render page if the related policy viewAny returns true', function (): void {
-    app()->bind(DepartmentPolicy::class . '::viewAny', fn (): bool => true);
+        $ticket = Ticket::factory()
+            ->create();
 
-    $ticket = Ticket::factory()
-        ->create();
+        $this->get(TicketResource::getUrl('departments', ['record' => $ticket]))
+            ->assertForbidden();
 
-    $this->get(TicketResource::getUrl('departments', ['record' => $ticket]))
-        ->assertSuccessful();
-});
+        app()->bind(TicketPolicy::class . '::viewAny', fn (): bool => true);
+    });
 
-it('can render page if the related policy viewAny returns an allowed response', function (): void {
-    app()->bind(DepartmentPolicy::class . '::viewAny', fn (): Response => Response::allow());
+    it('can render page if the related policy `viewAny()` returns `true`', function (): void {
+        app()->bind(DepartmentPolicy::class . '::viewAny', fn (): bool => true);
 
-    $ticket = Ticket::factory()
-        ->create();
+        $ticket = Ticket::factory()
+            ->create();
 
-    $this->get(TicketResource::getUrl('departments', ['record' => $ticket]))
-        ->assertSuccessful();
+        $this->get(TicketResource::getUrl('departments', ['record' => $ticket]))
+            ->assertSuccessful();
+    });
 
-    app()->bind(DepartmentPolicy::class . '::viewAny', fn (): bool => true);
-});
+    it('can render page if the related policy `viewAny()` returns an allowed response', function (): void {
+        app()->bind(DepartmentPolicy::class . '::viewAny', fn (): Response => Response::allow());
 
-it('does not render page if the related policy viewAny returns false', function (): void {
-    app()->bind(DepartmentPolicy::class . '::viewAny', fn (): bool => false);
+        $ticket = Ticket::factory()
+            ->create();
 
-    $ticket = Ticket::factory()
-        ->create();
+        $this->get(TicketResource::getUrl('departments', ['record' => $ticket]))
+            ->assertSuccessful();
 
-    $this->get(TicketResource::getUrl('departments', ['record' => $ticket]))
-        ->assertForbidden();
+        app()->bind(DepartmentPolicy::class . '::viewAny', fn (): bool => true);
+    });
 
-    app()->bind(DepartmentPolicy::class . '::viewAny', fn (): bool => true);
-});
+    it('does not render page if the related policy `viewAny()` returns `false`', function (): void {
+        app()->bind(DepartmentPolicy::class . '::viewAny', fn (): bool => false);
 
-it('does not render page if the related policy viewAny returns a denied response', function (): void {
-    app()->bind(DepartmentPolicy::class . '::viewAny', fn (): Response => Response::deny());
+        $ticket = Ticket::factory()
+            ->create();
 
-    $ticket = Ticket::factory()
-        ->create();
+        $this->get(TicketResource::getUrl('departments', ['record' => $ticket]))
+            ->assertForbidden();
 
-    $this->get(TicketResource::getUrl('departments', ['record' => $ticket]))
-        ->assertForbidden();
+        app()->bind(DepartmentPolicy::class . '::viewAny', fn (): bool => true);
+    });
 
-    app()->bind(DepartmentPolicy::class . '::viewAny', fn (): bool => true);
-});
+    it('does not render page if the related policy `viewAny()` returns a denied response', function (): void {
+        app()->bind(DepartmentPolicy::class . '::viewAny', fn (): Response => Response::deny());
 
-it('re-authorizes viewAny on Livewire updates after the initial mount of a related records page', function (): void {
-    $ticket = Ticket::factory()
-        ->create();
+        $ticket = Ticket::factory()
+            ->create();
 
-    app()->bind(TicketPolicy::class . '::viewAny', fn (): bool => true);
+        $this->get(TicketResource::getUrl('departments', ['record' => $ticket]))
+            ->assertForbidden();
 
-    $component = livewire(ManageTicketDepartments::class, ['record' => $ticket->getKey()]);
+        app()->bind(DepartmentPolicy::class . '::viewAny', fn (): bool => true);
+    });
 
-    app()->bind(TicketPolicy::class . '::viewAny', fn (): bool => false);
+    it('re-authorizes `viewAny()` on Livewire updates after the initial mount of a related records page', function (): void {
+        $ticket = Ticket::factory()
+            ->create();
 
-    $component
-        ->set('tableSearch', 'foo')
-        ->assertStatus(403);
+        app()->bind(TicketPolicy::class . '::viewAny', fn (): bool => true);
 
-    app()->bind(TicketPolicy::class . '::viewAny', fn (): bool => true);
+        $component = livewire(ManageTicketDepartments::class, ['record' => $ticket->getKey()]);
+
+        app()->bind(TicketPolicy::class . '::viewAny', fn (): bool => false);
+
+        $component
+            ->set('tableSearch', 'foo')
+            ->assertStatus(403);
+
+        app()->bind(TicketPolicy::class . '::viewAny', fn (): bool => true);
+    });
 });
 
 it('renders actions based on policy', function (string $action, string $policyMethod, bool | Response $policyResult, bool $isVisible, bool $isSoftDeleted = false, bool $isTableAction = false, bool $isBulkAction = false): void {
@@ -246,3 +262,11 @@ it('renders actions based on policy', function (string $action, string $policyMe
     'restore bulk action with policy returning false' => fn (): array => [RestoreBulkAction::class, 'restoreAny', false, false, true, true, true],
     'restore bulk action with policy returning denied response' => fn (): array => [RestoreBulkAction::class, 'restoreAny', Response::deny(), false, true, true, true],
 ]);
+
+class ManageUserPostsWithRecordTitle extends ManageUserPosts
+{
+    public function table(Table $table): Table
+    {
+        return parent::table($table)->recordTitleAttribute('title');
+    }
+}

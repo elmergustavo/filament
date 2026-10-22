@@ -11,11 +11,7 @@ use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Wizard;
 use Filament\Schemas\Components\Wizard\Step;
 use Filament\Schemas\Schema;
-use Filament\Support\Components\Attributes\ExposedLivewireMethod;
 use Filament\Support\Icons\Heroicon;
-use Livewire\Attributes\Renderless;
-
-use function Amp\delay;
 
 class WizardBrowserTest extends Page
 {
@@ -45,18 +41,13 @@ class WizardBrowserTest extends Page
                     Step::make('Basic Details')
                         ->key('details')
                         ->id('profile-details')
-                        ->beforeValidation(static function (): void {
-                            delay(1);
-                        })
                         ->schema([
-                            WizardBrowserTestSelect::make('status')
+                            Select::make('status')
                                 ->options([
                                     'draft' => 'Draft',
                                     'published' => 'Published',
                                 ])
-                                ->dynamicOptions()
-                                ->native(false)
-                                ->extraAttributes(['data-testid' => 'wizard-dynamic-select']),
+                                ->native(false),
                         ]),
 
                     Step::make('Contact Information')->key('contact')->id('profile-contact')
@@ -69,9 +60,10 @@ class WizardBrowserTest extends Page
                 ])
                     ->id('profile-wizard')
                     ->persistStepInQueryString()
-                    ->nextAction(static fn (Action $action): Action => $action->extraAttributes([
-                        'data-testid' => 'wizard-next-action',
-                    ]))
+                    ->nextAction(static fn (Action $action): Action => $action
+                        ->extraAttributes([
+                            'data-testid' => 'wizard-next-action',
+                        ]))
                     ->key('wizard'),
                 Group::make([
                     Wizard::make([
@@ -92,17 +84,5 @@ class WizardBrowserTest extends Page
     public function save(): void
     {
         $this->form->getState();
-    }
-}
-
-class WizardBrowserTestSelect extends Select
-{
-    #[ExposedLivewireMethod]
-    #[Renderless]
-    public function getOptionsForJs(): array
-    {
-        delay(1);
-
-        return parent::getOptionsForJs();
     }
 }

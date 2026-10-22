@@ -1,14 +1,12 @@
 ---
 title: Global search
 ---
-import AutoScreenshot from "@components/AutoScreenshot.astro"
-import Aside from "@components/Aside.astro"
 
 ## Introduction
 
 Global search allows you to search across all of your resource records, from anywhere in the app.
 
-<AutoScreenshot name="panels/resources/global-search" alt="Global search" version="4.x" />
+<AutoScreenshot name="panels/resources/global-search" alt="Global search" />
 
 ## Setting global search result titles
 
@@ -62,7 +60,7 @@ public static function getGlobalSearchResultDetails(Model $record): array
 
 In this example, the category and author of the record will be displayed below its title in the search result.
 
-<AutoScreenshot name="panels/resources/global-search-details" alt="Global search with extra details" version="4.x" />
+<AutoScreenshot name="panels/resources/global-search-details" alt="Global search with extra details" />
 
 However, the `category` and `author` relationships will be lazy-loaded, which will result in poor results performance. To [eager-load](https://laravel.com/docs/eloquent-relationships#eager-loading) these relationships, we must override the `getGlobalSearchEloquentQuery()` method:
 
@@ -104,7 +102,7 @@ public static function getGlobalSearchResultActions(Model $record): array
 
 You can learn more about how to style action buttons [here](../actions/overview).
 
-<AutoScreenshot name="panels/resources/global-search-actions" alt="Global search with actions" version="4.x" />
+<AutoScreenshot name="panels/resources/global-search-actions" alt="Global search with actions" />
 
 ### Opening URLs from global search actions
 
@@ -130,7 +128,7 @@ Action::make('quickView')
 
 ## Limiting the number of global search results
 
-By default, global search will return up to 50 results per resource. You can customize this on the resource label by overriding the `$globalSearchResultsLimit` property:
+By default, global search will return up to 50 results per resource. You can customize this on the resource class by overriding the `$globalSearchResultsLimit` property:
 
 ```php
 protected static int $globalSearchResultsLimit = 20;
@@ -144,11 +142,11 @@ By default, global search results are ordered alphabetically by resource name. Y
 protected static ?int $globalSearchSort = 3;
 ```
 
-Now, navigation items with a lower sort value will appear before those with a higher sort value - the order is ascending.
+Resources with a lower sort value will appear before those with a higher sort value.
 
 ## Disabling global search
 
-As [explained above](#title), global search is automatically enabled once you set a title attribute for your resource. Sometimes you may want to specify the title attribute while not enabling global search.
+As [explained above](#setting-global-search-result-titles), global search is automatically enabled once you set a title attribute for your resource. Sometimes you may want to specify the title attribute while not enabling global search.
 
 This can be achieved by disabling global search in the [configuration](../panel-configuration):
 
@@ -251,7 +249,7 @@ public function panel(Panel $panel): Panel
 }
 ```
 
-<AutoScreenshot name="panels/resources/global-search-key-binding" alt="Global search field with key binding suffix" version="4.x" />
+<AutoScreenshot name="panels/resources/global-search-key-binding" alt="Global search field with key binding suffix" />
 
 To customize the suffix yourself, you can pass a string or function to the `globalSearchFieldSuffix()` method. For example, to provide a custom key binding suffix for each platform manually:
 

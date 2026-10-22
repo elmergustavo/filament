@@ -1,11 +1,8 @@
 ---
 title: Listing records
 ---
-import AutoScreenshot from "@components/AutoScreenshot.astro"
-import Aside from "@components/Aside.astro"
-import UtilityInjection from "@components/UtilityInjection.astro"
 
-<AutoScreenshot name="panels/resources/listing" alt="Resource listing page" version="4.x" />
+<AutoScreenshot name="panels/resources/listing" alt="Resource listing page" />
 
 ## Using tabs to filter the records
 
@@ -27,7 +24,7 @@ public function getTabs(): array
 }
 ```
 
-<AutoScreenshot name="panels/resources/listing-tabs" alt="Resource listing page with tabs" version="4.x" />
+<AutoScreenshot name="panels/resources/listing-tabs" alt="Resource listing page with tabs" />
 
 ### Customizing the filter tab labels
 
@@ -60,7 +57,7 @@ Tab::make()
     ->icon('heroicon-m-user-group')
 ```
 
-<AutoScreenshot name="panels/resources/listing-tabs-icons" alt="Resource listing page with tab icons" version="4.x" />
+<AutoScreenshot name="panels/resources/listing-tabs-icons" alt="Resource listing page with tab icons" />
 
 You can also change the icon's position to be after the label instead of before it, using the `iconPosition()` method:
 
@@ -95,9 +92,9 @@ Tab::make()
     ->badgeColor('success')
 ```
 
-<UtilityInjection set="schemaComponents" version="4.x" extras="Badge;;?string;;$badge;;The evaluated value of the badge.">As well as allowing a static value, the `badgeColor()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
+<UtilityInjection set="schemaComponents" extras="Badge;;?string;;$badge;;The evaluated value of the badge.">As well as allowing a static value, the `badgeColor()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
 
-<AutoScreenshot name="panels/resources/listing-tabs-badge-colors" alt="Resource listing page with colored tab badges" version="4.x" />
+<AutoScreenshot name="panels/resources/listing-tabs-badge-colors" alt="Resource listing page with colored tab badges" />
 
 #### Deferring the loading of filter tab badges
 
@@ -114,8 +111,6 @@ Tab::make()
 <Aside variant="danger">
     The `badge()` value must be returned from a function when using `deferBadge()`. If you pass a raw value like `badge(Customer::query()->count())`, the query runs immediately when the tab is built, defeating the purpose of deferral.
 </Aside>
-
-While the badges are loading, a small loading indicator will appear in place of each deferred badge. Once the data is fetched, the loading indicators will be replaced with the actual badge values.
 
 ### Adding extra attributes to filter tabs
 
@@ -185,7 +180,7 @@ For authorization, Filament will observe any [model policies](https://laravel.co
 
 Users may access the List page if the `viewAny()` method of the model policy returns `true`.
 
-The `reorder()` method is used to control [reordering a record](#reordering-records).
+The `reorder()` method is used to control [reordering a record](../tables/overview#reordering-records).
 
 ## Customizing the table Eloquent query
 

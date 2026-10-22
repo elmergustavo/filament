@@ -9,7 +9,11 @@ import FilePondPluginImageExifOrientation from 'filepond-plugin-image-exif-orien
 import FilePondPluginImagePreview from 'filepond-plugin-image-preview'
 import FilePondPluginImageResize from 'filepond-plugin-image-resize'
 import FilePondPluginImageTransform from 'filepond-plugin-image-transform'
-import FilePondPluginMediaPreview from './file-upload/filepond-plugin-media-preview'
+import FilePondPluginMediaPreview from './file-upload/filepond-plugin-media-preview.js'
+import {
+    observeFieldAccessibility,
+    setFieldAccessibilityAttributes,
+} from '../utilities/field-accessibility.js'
 
 FilePond.registerPlugin(FilePondPluginFileValidateSize)
 FilePond.registerPlugin(FilePondPluginFileValidateType)
@@ -110,6 +114,8 @@ export default function fileUploadFormComponent({
 
         editingFile: {},
 
+        editingFileId: null,
+
         currentRatio: '',
 
         editor: {},
@@ -117,6 +123,7 @@ export default function fileUploadFormComponent({
         visibilityObserver: null,
 
         intersectionObserver: null,
+        accessibilityObserver: null,
 
         isInitializing: false,
 
@@ -176,8 +183,6 @@ export default function fileUploadFormComponent({
                 return
             }
 
-            FilePond.setOptions(locales[locale] ?? locales['en'])
-
             const files = await this.getFiles()
 
             if (isDestroyed) {
@@ -186,12 +191,16 @@ export default function fileUploadFormComponent({
                 return
             }
 
-            this.pond = FilePond.create(this.$refs.input, {
+            const input = this.$refs.input
+            const inputLabelledBy = input.getAttribute('aria-labelledby')
+
+            this.pond = FilePond.create(input, {
+                ...(locales[locale] ?? locales['en']),
                 acceptedFileTypes,
                 allowImageExifOrientation: shouldOrientImageFromExif,
-                allowPaste: isPasteable,
-                allowRemove: isDeletable,
-                allowReorder: isReorderable,
+                allowPaste: isPasteable && !isDisabled,
+                allowRemove: isDeletable && !isDisabled,
+                allowReorder: isReorderable && !isDisabled,
                 allowImagePreview: isPreviewable,
                 allowVideoPreview: isPreviewable,
                 allowAudioPreview: isPreviewable,
@@ -230,12 +239,57 @@ export default function fileUploadFormComponent({
                     shouldAutomaticallyUpscaleImagesWhenResizing,
                 imageTransformOutputStripImageHead: false,
                 itemInsertLocation: shouldAppendFiles ? 'after' : 'before',
-                ...(placeholder && { labelIdle: placeholder }),
+                ...(placeholder !== null && { labelIdle: placeholder }),
                 maxFiles,
                 maxFileSize: maxSize,
                 mediaPreviewHeight: imagePreviewHeight,
                 minFileSize: minSize,
                 ...(maxParallelUploads && { maxParallelUploads }),
+                oninit: () => {
+                    if (isDestroyed) {
+                        return
+                    }
+
+                    const browser =
+                        this.pond.element.querySelector('.filepond--browser')
+
+                    if (inputLabelledBy) {
+                        browser?.setAttribute(
+                            'aria-labelledby',
+                            inputLabelledBy,
+                        )
+                    }
+
+                    const description =
+                        browser?.getAttribute('aria-describedby')
+                    const sync = (attributes, source) => {
+                        const browseDescription = attributes['aria-describedby']
+
+                        if (
+                            source.hasAttribute(
+                                'data-preserve-filepond-description',
+                            )
+                        ) {
+                            attributes['aria-describedby'] =
+                                [description, attributes['aria-describedby']]
+                                    .filter(Boolean)
+                                    .join(' ') || null
+                        }
+
+                        setFieldAccessibilityAttributes(browser, attributes)
+                        setFieldAccessibilityAttributes(
+                            this.pond.element.querySelector(
+                                '.filepond--label-action',
+                            ),
+                            { 'aria-describedby': browseDescription },
+                        )
+                    }
+
+                    this.accessibilityObserver = observeFieldAccessibility(
+                        this.$el,
+                        sync,
+                    )
+                },
                 styleButtonProcessItemPosition: uploadButtonPosition,
                 styleButtonRemoveItemPosition: removeUploadedFileButtonPosition,
                 styleItemPanelAspectRatio: itemPanelAspectRatio,
@@ -245,10 +299,14 @@ export default function fileUploadFormComponent({
                 styleProgressIndicatorPosition: uploadProgressIndicatorPosition,
                 server: {
                     load: async (source, load) => {
+                        const uploadedFile =
+                            this.fileKeyIndex[this.uploadedFileIndex[source]]
                         let response = await fetch(source, {
                             cache: 'no-store',
                         })
                         let blob = await response.blob()
+
+                        blob.name = uploadedFile?.name
 
                         load(blob)
                     },
@@ -328,7 +386,7 @@ export default function fileUploadFormComponent({
                         load()
                     },
                 },
-                allowImageEdit: isImageEditorExplicitlyEnabled,
+                allowImageEdit: isImageEditorExplicitlyEnabled && !isDisabled,
                 imageEditEditor: {
                     open: (file) => this.loadEditor(file),
                     onconfirm: () => {},
@@ -442,8 +500,8 @@ export default function fileUploadFormComponent({
                 )
             })
 
-            this.pond.on('initfile', async (fileItem) => {
-                if (isDestroyed) {
+            this.pond.on('addfile', async (error, fileItem) => {
+                if (isDestroyed || error) {
                     return
                 }
 
@@ -458,8 +516,8 @@ export default function fileUploadFormComponent({
                 this.insertDownloadLink(fileItem)
             })
 
-            this.pond.on('initfile', async (fileItem) => {
-                if (isDestroyed) {
+            this.pond.on('addfile', async (error, fileItem) => {
+                if (isDestroyed || error) {
                     return
                 }
 
@@ -745,21 +803,15 @@ export default function fileUploadFormComponent({
 
         closeEditor() {
             if (this.isEditorOpenedForAspectRatio) {
-                const fileItem = this.pond
-                    .getFiles()
-                    .find(
-                        (uploadedFile) =>
-                            uploadedFile.filename === this.editingFile.name,
-                    )
-
-                if (fileItem) {
-                    this.pond.removeFile(fileItem.id, { revert: true })
+                if (this.editingFileId) {
+                    this.pond.removeFile(this.editingFileId, { revert: true })
                 }
 
                 this.isEditorOpenedForAspectRatio = false
             }
 
             this.editingFile = {}
+            this.editingFileId = null
 
             this.isEditorOpen = false
 
@@ -854,6 +906,10 @@ export default function fileUploadFormComponent({
                 return
             }
 
+            this.editingFileId = this.pond
+                .getFiles()
+                .find((uploadedFile) => uploadedFile.file === file)?.id
+
             this.fixImageDimensions(file, (editingFile) => {
                 if (isDestroyed) {
                     return
@@ -941,15 +997,8 @@ export default function fileUploadFormComponent({
                         return
                     }
 
-                    const editingFileItem = this.pond
-                        .getFiles()
-                        .find(
-                            (uploadedFile) =>
-                                uploadedFile.filename === this.editingFile.name,
-                        )
-
-                    if (editingFileItem) {
-                        this.pond.removeFile(editingFileItem.id, {
+                    if (this.editingFileId) {
+                        this.pond.removeFile(this.editingFileId, {
                             revert: true,
                         })
                     }
@@ -1068,6 +1117,7 @@ export default function fileUploadFormComponent({
 
             this.visibilityObserver?.disconnect()
             this.intersectionObserver?.disconnect()
+            this.accessibilityObserver?.disconnect()
 
             this.destroyEditor()
 

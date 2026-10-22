@@ -1,14 +1,12 @@
 ---
 title: Custom pages
 ---
-import AutoScreenshot from "@components/AutoScreenshot.astro"
-import Aside from "@components/Aside.astro"
 
 ## Introduction
 
 Filament allows you to create completely custom pages for the app.
 
-<AutoScreenshot name="panels/custom-page" alt="A custom page with header actions" version="4.x" />
+<AutoScreenshot name="panels/custom-page" alt="A custom page with header actions" />
 
 ## Creating a page
 
@@ -59,7 +57,7 @@ protected function getHeaderActions(): array
 ```
 
 <Aside variant="warning">
-    If `$post` is stored in a public Livewire property, the page's `canAccess()` method does not authorize it, and Filament does not re-query it on later requests. Re-query and authorize the post before using it in an action. See [Eloquent model restoration in Livewire](../advanced/security#understanding-eloquent-model-restoration-in-livewire) for more information.
+    If `$post` is stored in a public Livewire property, the page's `canAccess()` method does not authorize it, and Filament does not re-query it on later requests. Re-query and authorize the post before using it in an action, including any tenant or ownership restrictions your application requires. Authorize access to the edit route separately. See [Eloquent model restoration in Livewire](../advanced/security#understanding-eloquent-model-restoration-in-livewire) for more information.
 </Aside>
 
 #### Aligning header actions
@@ -240,6 +238,8 @@ public static function getNavigationLabel(): string
 }
 ```
 
+You may also [render HTML in the navigation label](overview#rendering-html-in-navigation-item-labels) by returning an `Htmlable` object.
+
 ## Customizing the page URL
 
 By default, Filament will automatically generate a URL (slug) for your page based on its name. You may override this by defining a `$slug` property on your page class:
@@ -282,7 +282,7 @@ public function getSubheading(): ?string
 }
 ```
 
-<AutoScreenshot name="panels/custom-page-subheading" alt="A custom page with a subheading" version="4.x" />
+<AutoScreenshot name="panels/custom-page-subheading" alt="A custom page with a subheading" />
 
 ## Replacing the page header with a custom view
 
@@ -371,11 +371,11 @@ use Filament\Pages\Enums\SubNavigationPosition;
 protected static ?SubNavigationPosition $subNavigationPosition = SubNavigationPosition::End;
 ```
 
-<AutoScreenshot name="panels/cluster-end" alt="Page with end sub-navigation position" version="4.x" />
+<AutoScreenshot name="panels/cluster-end" alt="Page with end sub-navigation position" />
 
 The `SubNavigationPosition::Top` option renders the sub-navigation as tabs above the page content:
 
-<AutoScreenshot name="panels/cluster-top" alt="Page with top sub-navigation position" version="4.x" />
+<AutoScreenshot name="panels/cluster-top" alt="Page with top sub-navigation position" />
 
 ## Adding extra attributes to the body tag of a page
 

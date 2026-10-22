@@ -1,9 +1,6 @@
 ---
 title: Rich editor
 ---
-import Aside from "@components/Aside.astro"
-import AutoScreenshot from "@components/AutoScreenshot.astro"
-import UtilityInjection from "@components/UtilityInjection.astro"
 
 ## Introduction
 
@@ -15,7 +12,7 @@ use Filament\Forms\Components\RichEditor;
 RichEditor::make('content')
 ```
 
-<AutoScreenshot name="forms/fields/rich-editor/simple" alt="Rich editor" version="4.x" />
+<AutoScreenshot name="forms/fields/rich-editor/simple" alt="Rich editor" />
 
 ## Storing content as JSON
 
@@ -71,7 +68,7 @@ RichEditor::make('content')
 
 Each nested array in the main array represents a group of buttons in the toolbar.
 
-<AutoScreenshot name="forms/fields/rich-editor/custom-toolbar" alt="Rich editor with customized toolbar buttons" version="4.x" />
+<AutoScreenshot name="forms/fields/rich-editor/custom-toolbar" alt="Rich editor with customized toolbar buttons" />
 
 Additional tools available in the toolbar include:
 
@@ -107,7 +104,7 @@ Additional tools available in the toolbar include:
 - `tableToggleHeaderCell` - Toggles the header cell of the table.
 - `tableDelete` - Deletes the table.
 
-<UtilityInjection set="formFields" version="4.x">As well as allowing a static value, the `toolbarButtons()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
+<UtilityInjection set="formFields">As well as allowing a static value, the `toolbarButtons()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
 
 ### Customizing floating toolbars
 
@@ -141,7 +138,7 @@ RichEditor::make('content')
     ])
 ```
 
-<AutoScreenshot name="forms/fields/rich-editor/floating-toolbar" alt="Rich editor with floating toolbar below selected text" version="4.x" />
+<AutoScreenshot name="forms/fields/rich-editor/floating-toolbar" alt="Rich editor with floating toolbar below selected text" />
 
 ### Grouping toolbar buttons into dropdowns
 
@@ -161,7 +158,7 @@ RichEditor::make('content')
     ])
 ```
 
-By default, the first button's icon is used as the dropdown trigger, and it updates reactively to reflect the currently active button. Clicking on the trigger reveals the grouped buttons.
+By default, the dropdown trigger uses the currently active button's icon, or the first button's icon if none is active.
 
 You can set a fixed icon for the dropdown trigger using the `icon()` method. When a custom icon is set, the trigger icon remains static and does not change based on the active button:
 
@@ -179,7 +176,7 @@ RichEditor::make('content')
     ])
 ```
 
-<AutoScreenshot name="forms/fields/rich-editor/toolbar-button-group-open" alt="Rich editor with an open toolbar button group dropdown" version="4.x" />
+<AutoScreenshot name="forms/fields/rich-editor/toolbar-button-group-open" alt="Rich editor with an open toolbar button group dropdown" />
 
 ### Using textual dropdown toolbar buttons
 
@@ -199,7 +196,7 @@ RichEditor::make('content')
     ])
 ```
 
-<AutoScreenshot name="forms/fields/rich-editor/textual-toolbar-button-group-open" alt="Rich editor with an open textual toolbar button group dropdown" version="4.x" />
+<AutoScreenshot name="forms/fields/rich-editor/textual-toolbar-button-group-open" alt="Rich editor with an open textual toolbar button group dropdown" />
 
 In this example, the `Paragraph` dropdown items display their icon alongside a text label (e.g., "Paragraph", "Heading 1"). The `Alignment` dropdown remains icon-only.
 
@@ -217,7 +214,7 @@ RichEditor::make('content')
 
 The editor has a minimum height of `10rem` by default. Once the content exceeds `maxHeight()`, the editor stops growing and becomes scrollable. Each method may be used on its own — `minHeight()` sets a starting height while still allowing the editor to grow, and `maxHeight()` caps how tall it may become. Pass `null` to `minHeight()` to use the editor's intrinsic `3rem` minimum height, or to `maxHeight()` to remove the cap. These constraints also apply when the editor is disabled.
 
-<UtilityInjection set="formFields" version="4.x">As well as allowing static values, the `minHeight()` and `maxHeight()` methods also accept functions to dynamically calculate them. You can inject various utilities into the functions as parameters.</UtilityInjection>
+<UtilityInjection set="formFields">As well as allowing static values, the `minHeight()` and `maxHeight()` methods also accept functions to dynamically calculate them. You can inject various utilities into the functions as parameters.</UtilityInjection>
 
 ## Keeping the toolbar and panels visible while scrolling
 
@@ -261,7 +258,7 @@ RichEditor::make('content')
 
 The offset accepts a CSS length value. Pass `null` to restore the automatic offset.
 
-<UtilityInjection set="formFields" version="4.x">As well as allowing static values, the `stickyToolbar()`, `stickyPanels()`, and `stickyOffset()` methods also accept functions to dynamically calculate them. You can inject various utilities into the functions as parameters.</UtilityInjection>
+<UtilityInjection set="formFields">As well as allowing static values, the `stickyToolbar()`, `stickyPanels()`, and `stickyOffset()` methods also accept functions to dynamically calculate them. You can inject various utilities into the functions as parameters.</UtilityInjection>
 
 ## Customizing text colors
 
@@ -280,7 +277,7 @@ RichEditor::make('content')
     ])
 ```
 
-<AutoScreenshot name="forms/fields/rich-editor/text-colors" alt="Rich editor text color picker modal" version="4.x" />
+<AutoScreenshot name="forms/fields/rich-editor/text-colors" alt="Rich editor text color picker modal" />
 
 If you would like to define different colors for light and dark mode, you can use the a `TextColor` object to define the color:
 
@@ -444,7 +441,7 @@ RichEditor::make('content')
     ->fileAttachmentsVisibility('private')
 ```
 
-<UtilityInjection set="formFields" version="4.x">As well as allowing static values, the `fileAttachmentsDisk()`, `fileAttachmentsDirectory()`, and `fileAttachmentsVisibility()` methods also accept functions to dynamically calculate them. You can inject various utilities into the function as parameters.</UtilityInjection>
+<UtilityInjection set="formFields">As well as allowing static values, the `fileAttachmentsDisk()`, `fileAttachmentsDirectory()`, and `fileAttachmentsVisibility()` methods also accept functions to dynamically calculate them. You can inject various utilities into the function as parameters.</UtilityInjection>
 
 <Aside variant="tip">
     Filament also supports [`spatie/laravel-medialibrary`](https://github.com/spatie/laravel-medialibrary) for storing rich editor file attachments. See our [plugin documentation](https://filamentphp.com/plugins/filament-spatie-media-library#using-media-library-for-rich-editor-file-attachments) for more information.
@@ -516,9 +513,9 @@ RichEditor::make('content')
 
 The callback receives the path exactly as submitted by the client. Use exact trusted paths where possible. Do not authorize an arbitrary directory using a prefix check, since the filesystem may normalize segments such as `..` after the callback runs.
 
-<UtilityInjection set="formFields" version="4.x" extras="File;;string;;$file;;The submitted `data-id` value being authorized.">You can inject various utilities into the function passed to `allowFilePathUsing` as parameters.</UtilityInjection>
+<UtilityInjection set="formFields" extras="File;;string;;$file;;The submitted `data-id` value being authorized.">You can inject various utilities into the function passed to `allowFilePathUsing` as parameters.</UtilityInjection>
 
-The validation error message can be customized via [`validationMessages()`](validation#customizing-validation-messages) using the `tampered` key:
+The validation error message can be customized via [`validationMessages()`](validation#validation-messages) using the `tampered` key:
 
 ```php
 use Filament\Forms\Components\RichEditor;
@@ -563,7 +560,7 @@ RichEditor::make('content')
 
 When enabled, users can resize images by clicking on them and dragging the resize handles. The aspect ratio is always preserved when resizing.
 
-<UtilityInjection set="formFields" version="4.x">As well as allowing a static value, the `resizableImages()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
+<UtilityInjection set="formFields">As well as allowing a static value, the `resizableImages()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
 
 ## Using custom blocks
 
@@ -579,7 +576,7 @@ RichEditor::make('content')
     ])
 ```
 
-<AutoScreenshot name="forms/fields/rich-editor/custom-blocks" alt="Rich editor with custom blocks panel open" version="4.x" />
+<AutoScreenshot name="forms/fields/rich-editor/custom-blocks" alt="Rich editor with custom blocks panel open" />
 
 To create a custom block, you can use the following command:
 
@@ -655,7 +652,7 @@ class HeroBlock extends RichContentCustomBlock
 }
 ```
 
-<AutoScreenshot name="forms/fields/rich-editor/custom-block-previews" alt="Rich editor with custom block previews and normal controls" version="4.x" />
+<AutoScreenshot name="forms/fields/rich-editor/custom-block-previews" alt="Rich editor with custom block previews and normal controls" />
 
 The `getPreviewLabel()` can be defined if you would like to customize the label that is displayed above the preview in the editor. By default, it will use the label defined in the `getLabel()` method, but the `getPreviewLabel()` is able to access the `$config` for the block, allowing you to display dynamic information in the label:
 
@@ -691,13 +688,11 @@ RichEditor::make('content')
     ->minimalCustomBlockControls()
 ```
 
-<AutoScreenshot name="forms/fields/rich-editor/minimal-custom-block-controls" alt="Rich editor with minimal controls beside short and tall custom block previews" version="4.x" />
+<AutoScreenshot name="forms/fields/rich-editor/minimal-custom-block-controls" alt="Rich editor with minimal controls beside short and tall custom block previews" />
 
 This setting applies to all custom blocks with previews in the editor. Blocks without a preview keep their usual header and label. Disabled editors do not display edit or delete buttons.
 
-The buttons stay at the top beside tall previews. Previews shorter than the buttons are vertically centered, with enough space for both buttons.
-
-<UtilityInjection set="formFields" version="4.x">As well as allowing a static value, the `minimalCustomBlockControls()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
+<UtilityInjection set="formFields">As well as allowing a static value, the `minimalCustomBlockControls()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
 
 ### Rendering content with custom blocks
 
@@ -794,9 +789,9 @@ Each grid item displays the block's label and its [icon](#adding-icons-to-custom
 
 Defining an icon for each block makes the grid easier to scan:
 
-<AutoScreenshot name="forms/fields/rich-editor/custom-blocks-grid" alt="Rich editor with icons above custom block labels in a grid" version="4.x" />
+<AutoScreenshot name="forms/fields/rich-editor/custom-blocks-grid" alt="Rich editor with icons above custom block labels in a grid" />
 
-<UtilityInjection set="formFields" version="4.x">As well as allowing a static value, the `customBlocksGrid()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
+<UtilityInjection set="formFields">As well as allowing a static value, the `customBlocksGrid()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
 
 ### Grouping custom blocks
 
@@ -821,7 +816,7 @@ RichEditor::make('content')
     ])
 ```
 
-<AutoScreenshot name="forms/fields/rich-editor/grouped-custom-blocks" alt="Rich editor with grouped custom blocks panel open" version="4.x" />
+<AutoScreenshot name="forms/fields/rich-editor/grouped-custom-blocks" alt="Rich editor with grouped custom blocks panel open" />
 
 Groups are displayed in the order they are defined in the array, with sticky headings in the side panel.
 
@@ -863,13 +858,13 @@ RichEditor::make('content')
     ->searchableCustomBlocks()
 ```
 
-Search matches block labels and group names, ignoring capitalization and surrounding whitespace. When a group name matches, all blocks in that group appear. If nothing matches, the panel displays a message. Clearing the search restores all blocks.
+Search matches block labels and group names, ignoring capitalization and surrounding whitespace. Matching a group name displays all blocks in that group.
 
 Search works with both the list and [grid](#displaying-custom-blocks-in-a-grid) layouts. It is disabled by default, and you can pass `false` to `searchableCustomBlocks()` to disable it.
 
-<UtilityInjection set="formFields" version="4.x">As well as allowing a static value, the `searchableCustomBlocks()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
+<UtilityInjection set="formFields">As well as allowing a static value, the `searchableCustomBlocks()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
 
-<AutoScreenshot name="forms/fields/rich-editor/searchable-custom-blocks-grid" alt="Rich editor with custom blocks filtered to the Media group, showing image gallery and video embed icons in a grid" version="4.x" />
+<AutoScreenshot name="forms/fields/rich-editor/searchable-custom-blocks-grid" alt="Rich editor with custom blocks filtered to the Media group, showing image gallery and video embed icons in a grid" />
 
 ### Opening the custom blocks panel by default
 
@@ -907,9 +902,7 @@ class HeadingBlock extends RichContentCustomBlock
 }
 ```
 
-When `shouldApplyProseStylingToPreview()` returns `true`, the block's preview will be styled with the prose typography styles defined in the rich editor, including proper margins, font sizes, and other text formatting. By default, this method returns `false`, so previews are displayed with minimal styling.
-
-You can make this decision based on the block's configuration, allowing different blocks to have different preview styling:
+You can also choose the preview styling based on the block's configuration:
 
 ```php
 public static function shouldApplyProseStylingToPreview(array $config): bool
@@ -934,7 +927,7 @@ RichEditor::make('content')
     ])
 ```
 
-<AutoScreenshot name="forms/fields/rich-editor/merge-tags" alt="Rich editor with merge tags panel" version="4.x" />
+<AutoScreenshot name="forms/fields/rich-editor/merge-tags" alt="Rich editor with merge tags panel" />
 
 Merge tags are surrounded by double curly braces, like `{{ name }}`. When the content is rendered, these tags will be replaced with the corresponding values.
 
@@ -1037,7 +1030,7 @@ RichEditor::make('content')
     ])
 ```
 
-<AutoScreenshot name="forms/fields/rich-editor/mentions" alt="Rich editor with mention suggestions" version="4.x" />
+<AutoScreenshot name="forms/fields/rich-editor/mentions" alt="Rich editor with mention suggestions" />
 
 Items passed to `items()` are sent to the browser along with the editor, so typing after the trigger character filters them client-side without making any requests to the server.
 
@@ -1111,7 +1104,7 @@ RichContentRenderer::make($record->content)
 ```
 
 <Aside variant="tip">
-    The string returned from the `url()` closure is rendered directly into the `href` attribute of an `<a>` tag, so if any part of the URL is built from user input you should make sure it cannot resolve to a scheme like `javascript:` or `data:` that the browser would execute. The simplest way to guarantee this is to wrap the return value in Filament's [`Str::sanitizeUrl()`](../../advanced/security#validating-user-input) helper, which only allows `http`/`https` and relative URLs:
+    The string returned from the `url()` closure is rendered directly into the `href` attribute of an `<a>` tag, so if any part of the URL is built from user input you should make sure it cannot resolve to a scheme like `javascript:` or `data:` that the browser would execute. The simplest way to guarantee this is to wrap the return value in Filament's [`Str::sanitizeUrl()`](../advanced/security#validating-user-input) helper, which only allows `http`/`https` and relative URLs:
 
     ```php
     use Illuminate\Support\Str;
@@ -1144,8 +1137,8 @@ class Post extends Model implements HasRichContent
             ->fileAttachmentsDisk('s3')
             ->fileAttachmentsVisibility('private')
             ->customBlocks([
-                HeroBlock::class => [
-                    'categoryUrl' => fn (): string => $this->category->getUrl(),
+                HeroBlock::class => fn (): array => [
+                    'categoryUrl' => $this->category->getUrl(),
                 ],
                 CallToActionBlock::class,
             ])
@@ -1504,6 +1497,10 @@ RichContentRenderer::make($record->content)
         HighlightRichContentPlugin::make(),
     ])
 ```
+
+### Configuring custom toolbar controls
+
+Use `toggle()` to expose a tool's formatting state, and `disabledWhenNotActive()` to disable it when its active expression is false. Use `action()` for Filament action modals to preserve editor selection and focus. If you use `jsHandler()` to open your own dialog or another asynchronous interface, manage its focus and return focus to a valid editor or toolbar control when it closes.
 
 ### Enabling or disabling toolbar buttons from a plugin
 

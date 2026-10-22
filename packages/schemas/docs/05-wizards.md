@@ -1,9 +1,6 @@
 ---
 title: Wizards
 ---
-import Aside from "@components/Aside.astro"
-import AutoScreenshot from "@components/AutoScreenshot.astro"
-import UtilityInjection from "@components/UtilityInjection.astro"
 
 ## Introduction
 
@@ -29,7 +26,7 @@ Wizard::make([
 ])
 ```
 
-<AutoScreenshot name="schemas/layout/wizard/simple" alt="Wizard" version="4.x" />
+<AutoScreenshot name="schemas/layout/wizard/simple" alt="Wizard" />
 
 <Aside variant="tip">
     We have different setup instructions if you're looking to add a wizard to the creation process inside a [panel resource](../resources/creating-records#using-a-wizard) or an [action modal](../actions/modals#rendering-a-wizard-in-a-modal). Following that documentation will ensure that the ability to submit the form is only available on the last step of the wizard.
@@ -73,7 +70,7 @@ BLADE)))
 
 You could extract this component to a separate Blade view if you prefer.
 
-<AutoScreenshot name="schemas/layout/wizard/submit-action" alt="Wizard with a submit button on the last step" version="4.x" />
+<AutoScreenshot name="schemas/layout/wizard/submit-action" alt="Wizard with a submit button on the last step" />
 
 ## Setting a step icon
 
@@ -90,13 +87,13 @@ Step::make('Order')
     ]),
 ```
 
-<UtilityInjection set="schemaComponents" version="4.x">As well as allowing a static value, the `icon()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
+<UtilityInjection set="schemaComponents">As well as allowing a static value, the `icon()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
 
-<AutoScreenshot name="schemas/layout/wizard/icons" alt="Wizard with step icons" version="4.x" />
+<AutoScreenshot name="schemas/layout/wizard/icons" alt="Wizard with step icons" />
 
 ## Customizing the icon for completed steps
 
-You may customize the [icon](#setting-up-step-icons) of a completed step using the `completedIcon()` method:
+You may customize the [icon](#setting-a-step-icon) of a completed step using the `completedIcon()` method:
 
 ```php
 use Filament\Schemas\Components\Wizard\Step;
@@ -109,9 +106,9 @@ Step::make('Order')
     ]),
 ```
 
-<UtilityInjection set="schemaComponents" version="4.x">As well as allowing a static value, the `completedIcon()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
+<UtilityInjection set="schemaComponents">As well as allowing a static value, the `completedIcon()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
 
-<AutoScreenshot name="schemas/layout/wizard/completed-icons" alt="Wizard with completed step icons" version="4.x" />
+<AutoScreenshot name="schemas/layout/wizard/completed-icons" alt="Wizard with completed step icons" />
 
 ## Adding descriptions to steps
 
@@ -127,9 +124,9 @@ Step::make('Order')
     ]),
 ```
 
-<UtilityInjection set="schemaComponents" version="4.x">As well as allowing a static value, the `description()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
+<UtilityInjection set="schemaComponents">As well as allowing a static value, the `description()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
 
-<AutoScreenshot name="schemas/layout/wizard/descriptions" alt="Wizard with step descriptions" version="4.x" />
+<AutoScreenshot name="schemas/layout/wizard/descriptions" alt="Wizard with step descriptions" />
 
 ## Setting the default active step
 
@@ -143,7 +140,7 @@ Wizard::make([
 ])->startOnStep(2)
 ```
 
-<UtilityInjection set="schemaComponents" version="4.x">As well as allowing a static value, the `startOnStep()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
+<UtilityInjection set="schemaComponents">As well as allowing a static value, the `startOnStep()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
 
 ## Allowing steps to be skipped
 
@@ -167,42 +164,7 @@ Wizard::make([
 ])->skippable(FeatureFlag::active())
 ```
 
-<UtilityInjection set="schemaComponents" version="4.x">As well as allowing a static value, the `skippable()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
-
-## Deferring the loading of step content
-
-If the content of a wizard step is expensive to render, you can pass a `Schema` object to its `schema()` method and use `deferLoading()`. The content of the active step will be loaded when it enters the viewport. The content of a later step will not be loaded until the user reaches it:
-
-```php
-use Filament\Forms\Components\TextInput;
-use Filament\Schemas\Components\Wizard;
-use Filament\Schemas\Components\Wizard\Step;
-use Filament\Schemas\Schema;
-
-Wizard::make([
-    Step::make('Account')
-        ->key('accountStep')
-        ->schema(
-            Schema::make()
-                ->components([
-                    TextInput::make('name'),
-                ])
-                ->deferLoading(),
-        ),
-    Step::make('Confirmation')
-        ->key('confirmationStep')
-        ->schema(
-            Schema::make()
-                ->components([
-                    // ...
-                ])
-                ->deferLoading(),
-        ),
-])
-    ->key('accountWizard')
-```
-
-Every deferred schema must have a unique key. In this example, the keys on the steps are inherited by their child schemas, while the key on the `Wizard` component namespaces them from other steps in the same schema. You can learn more in the [schema overview](overview#deferring-the-loading-of-a-child-schema).
+<UtilityInjection set="schemaComponents">As well as allowing a static value, the `skippable()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
 
 ## Persisting the current step in the URL's query string
 
@@ -226,7 +188,7 @@ Wizard::make([
 ])->persistStepInQueryString('wizard-step')
 ```
 
-<UtilityInjection set="schemaComponents" version="4.x">As well as allowing a static value, the `persistStepInQueryString()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
+<UtilityInjection set="schemaComponents">As well as allowing a static value, the `persistStepInQueryString()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
 
 ## Step lifecycle hooks
 
@@ -247,7 +209,7 @@ Step::make('Order')
     ]),
 ```
 
-<UtilityInjection set="schemaComponents" version="4.x">You can inject various utilities into the `afterValidation()` and `beforeValidation()` functions as parameters.</UtilityInjection>
+<UtilityInjection set="schemaComponents">You can inject various utilities into the `afterValidation()` and `beforeValidation()` functions as parameters.</UtilityInjection>
 
 ### Preventing the next step from being loaded
 
@@ -288,7 +250,7 @@ Wizard::make([
 ])
 ```
 
-<UtilityInjection set="schemaComponents" version="4.x">As well as allowing a static value, the `columns()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
+<UtilityInjection set="schemaComponents">As well as allowing a static value, the `columns()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
 
 ## Customizing the wizard action objects
 
@@ -311,4 +273,39 @@ Wizard::make([
     )
 ```
 
-<UtilityInjection set="formFields" version="4.x" extras="Action;;Filament\Actions\Action;;$action;;The action object to customize.">The action registration methods can inject various utilities into the function as parameters.</UtilityInjection>
+<UtilityInjection set="formFields" extras="Action;;Filament\Actions\Action;;$action;;The action object to customize.">The action registration methods can inject various utilities into the function as parameters.</UtilityInjection>
+
+## Deferring the loading of step content
+
+If the content of a wizard step is expensive to render, you can pass a `Schema` object to its `schema()` method and use `deferLoading()`. The content of the active step will be loaded when it enters the viewport. The content of a later step will not be loaded until the user reaches it:
+
+```php
+use Filament\Forms\Components\TextInput;
+use Filament\Schemas\Components\Wizard;
+use Filament\Schemas\Components\Wizard\Step;
+use Filament\Schemas\Schema;
+
+Wizard::make([
+    Step::make('Account')
+        ->key('accountStep')
+        ->schema(
+            Schema::make()
+                ->components([
+                    TextInput::make('name'),
+                ])
+                ->deferLoading(),
+        ),
+    Step::make('Confirmation')
+        ->key('confirmationStep')
+        ->schema(
+            Schema::make()
+                ->components([
+                    // ...
+                ])
+                ->deferLoading(),
+        ),
+])
+    ->key('accountWizard')
+```
+
+Every deferred schema must have a unique key. In this example, the keys on the steps are inherited by their child schemas, while the key on the `Wizard` component namespaces them from other steps in the same schema. You can learn more in the [schema overview](overview#deferring-the-loading-of-a-child-schema).

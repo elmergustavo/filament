@@ -1,14 +1,10 @@
 ---
 title: Overview
 ---
-import Aside from "@components/Aside.astro"
-import AutoScreenshot from "@components/AutoScreenshot.astro"
 
 ## Introduction
 
-Schemas form the foundation of Filament's Server-Driven UI approach. They allow you to build user interfaces declaratively using PHP configuration objects. These configuration objects represent components that define the structure and behavior of your UI, such as forms, tables, or lists. Rather than manually writing HTML or JavaScript, you create these schemas to control what gets rendered on the server, streamlining development and ensuring consistency across your app.
-
-Schemas are used extensively across Filament to render UI elements dynamically. Whether you're defining a form field, the layout of your page, or an action button, the schema object defines both the component's configuration and how it interacts with your data. In essence, schemas are the building blocks of Filament UIs.
+Schemas let you build user interfaces in PHP by combining components for input, display, and layout. A schema is represented by a `Filament\Schemas\Schema` object, and you pass its components to the `components()` method. Components can contain child schemas to create nested layouts.
 
 Filament packages provide you with various components. You can find a full list in the [available components section](#available-components):
 
@@ -16,10 +12,6 @@ Filament packages provide you with various components. You can find a full list 
 - [Infolist entries](../infolists) are components for rendering "description lists." Entries are key-value UI elements that can present read-only information like text, icons, and images. The data for an infolist can be sourced from anywhere but commonly comes from an individual Eloquent record.
 - [Layout components](layouts) are used to structure the components. For example, a grid, tabs, or a multi-step form wizard.
 - [Prime components](primes) are simple components that are used to render basic stand-alone static content, such as text, images, and buttons (actions).
-
-Schemas act as a container for many components, and you can add any combination of components within them. Components can also nest child schemas within them, allowing for an infinite level of nesting.
-
-A schema is represented by a `Filament\Schemas\Schema` object, and you can pass an array of components to it in the `components()` method.
 
 ## Available components
 
@@ -68,7 +60,7 @@ To arrange components into a [layout](layouts), Filament includes layout compone
 - [Wizard](wizards)
 - [Callout](callouts)
 - [Empty states](empty-states)
-- Or, build your own [custom layout component](custom-components#custom-layout-components)
+- Or, build your own [custom layout component](custom-components#custom-component-classes)
 
 For displaying arbitrary content, Filament includes [prime](primes) components:
 
@@ -118,7 +110,7 @@ $schema
     ])
 ```
 
-<AutoScreenshot name="schemas/overview/example" alt="Example schema" version="4.x" />
+<AutoScreenshot name="schemas/overview/example" alt="Example schema" />
 
 [Grid](layouts#grid-component) is a layout component that renders multiple components together in a responsive grid. The number of columns in the grid is specified in the `make()` method. The `schema()` method is used to nest components within the grid.
 
@@ -341,4 +333,4 @@ Section::make()
 
 ## Restricting Livewire file uploads to schema components
 
-If you build a custom Livewire component on top of `InteractsWithSchemas`, Livewire's file upload RPC methods accept uploads to any property path by default. See [Restricting Livewire file uploads to schema components](../../advanced/security#restricting-livewire-file-uploads-to-schema-components) in the security documentation for the `RestrictsFileUploadsToSchemaComponents` trait that locks them down.
+If you build a custom Livewire component on top of `InteractsWithSchemas`, Livewire's file upload RPC methods accept uploads to any property path by default. See [Restricting Livewire file uploads to schema components](../advanced/security#restricting-livewire-file-uploads-to-schema-components) in the security documentation for the `RestrictsFileUploadsToSchemaComponents` trait that locks them down.
