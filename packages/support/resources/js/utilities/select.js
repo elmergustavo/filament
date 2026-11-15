@@ -1200,6 +1200,12 @@ export class Select {
                     const labelSpan = document.createElement('span')
                     labelSpan.innerHTML = newLabel
                     option.appendChild(labelSpan)
+                    option.setAttribute(
+                        'aria-label',
+                        labelSpan.textContent ||
+                            labelSpan.innerText ||
+                            newLabel,
+                    )
                 } else {
                     option.appendChild(document.createTextNode(newLabel))
                 }
@@ -1243,7 +1249,7 @@ export class Select {
 
     // Handle keyboard events for the select button
     handleSelectButtonKeydown(event) {
-        if (event.isComposing) return
+        if (event.isComposing || event.keyCode === 229) return
 
         if (
             (!this.isOpen || this.isSearchable) &&
@@ -1260,7 +1266,7 @@ export class Select {
 
     // Handle keyboard events within the dropdown
     handleDropdownKeydown(event) {
-        if (event.isComposing) return
+        if (event.isComposing || event.keyCode === 229) return
 
         const isEditing = event.target === this.searchInput
         const options = this.getEnabledOptions()

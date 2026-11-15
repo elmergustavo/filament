@@ -203,9 +203,8 @@ The chart takes its colors from the [color of the stat](#changing-the-color-of-t
 }
 ```
 
-<Aside variant="info">
-    These properties only affect the charts inside stats. [Chart widgets](charts#styling-charts-in-a-theme) are styled with their own set, prefixed `--chart-`.
-</Aside>
+> [!NOTE]
+> These properties only affect the charts inside stats. [Chart widgets](charts#styling-charts-in-a-theme) are styled with their own set, prefixed `--chart-`.
 
 ## Live updating stats (polling)
 
@@ -227,10 +226,10 @@ protected ?string $pollingInterval = null;
 
 By default, widgets are lazy-loaded. This means that they will only be loaded when they are visible on the page.
 
-To disable this behavior, you may override the `$isLazy` property on the widget class:
+To disable this behavior, you may override the `$isLazyLoaded` property on the widget class:
 
 ```php
-protected static bool $isLazy = false;
+protected static ?bool $isLazyLoaded = false;
 ```
 
 ## Adding a heading and description

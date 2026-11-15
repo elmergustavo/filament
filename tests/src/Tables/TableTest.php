@@ -7,7 +7,9 @@ use Filament\Schemas\Concerns\InteractsWithSchemas;
 use Filament\Schemas\Contracts\HasSchemas;
 use Filament\Support\Facades\FilamentView;
 use Filament\Tables;
+use Filament\Tables\Enums\FiltersLayout;
 use Filament\Tables\Enums\PaginationMode;
+use Filament\Tables\Enums\RecordActionsPosition;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Grouping\Group;
 use Filament\Tables\Table;
@@ -27,6 +29,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Livewire\Component;
+use Livewire\Features\SupportLockedProperties\CannotUpdateLockedPropertyException;
 
 use function Filament\Tests\livewire;
 
@@ -54,11 +57,67 @@ describe('stacked on mobile', function (): void {
     });
 });
 
-describe('defer loading', function (): void {
-    it('defaults `isLoadingDeferred()` to `false`', function (): void {
+describe('lazy loading', function (): void {
+    it('defaults `isLazyLoaded()` and its deprecated alias to `false`', function (): void {
         $table = livewire(TableTestComponent::class)->instance()->getTable();
 
-        expect($table->isLoadingDeferred())->toBeFalse();
+        expect($table->isLoadingDeferred())->toBeFalse()
+            ->and($table->isLazyLoaded())->toBeFalse();
+    });
+
+    it('shares configuration between `lazyLoaded()` and `deferLoading()`', function (): void {
+        $table = livewire(TableTestComponent::class)->instance()->getTable()->lazyLoaded();
+
+        expect($table->isLoadingDeferred())->toBeTrue()
+            ->and($table->deferLoading(false)->isLazyLoaded())->toBeFalse()
+            ->and($table->deferLoading()->lazyLoaded(static fn (): bool => false)->isLoadingDeferred())->toBeFalse();
+    });
+
+    it('forwards `isLoadingDeferred()` to an overridden `isLazyLoaded()`', function (): void {
+        $table = new class(livewire(TableTestComponent::class)->instance()) extends Table
+        {
+            public function isLazyLoaded(): bool
+            {
+                return true;
+            }
+        };
+
+        expect($table->isLoadingDeferred())->toBeTrue();
+    });
+
+    it('loads table records once when the table becomes visible', function (): void {
+        Artisan::call('filament:assets');
+        $this->actingAs(User::factory()->create());
+        Post::factory()->create(['title' => 'Viewport table record']);
+
+        $page = visit('/table-render-hooks-browser-test?isTableLazyLoaded=1');
+        $page->page()->context()->addInitScript(<<<'JS'
+            window.tableLoadCalls = [];
+            document.addEventListener('livewire:init', () => {
+                Livewire.hook('request', ({ options }) => {
+                    window.tableLoadCalls.push(...JSON.parse(options.body).components.flatMap(component => component.calls).filter(call => call.method === 'loadTable'));
+                });
+            });
+            JS);
+        $page->refresh()->assertVisible('[data-testid="lazy-table-section"] [aria-expanded="false"]')
+            ->assertDontSee('Viewport table record');
+
+        expect($page->script('window.tableLoadCalls'))->toBe([]);
+
+        $page->click('[data-testid="lazy-table-section"] [aria-expanded]')
+            ->assertSee('Viewport table record')
+            ->assertNoSmoke()
+            ->assertNoAccessibilityIssues();
+        $page->click('[data-testid="lazy-table-section"] [aria-expanded]')
+            ->click('[data-testid="lazy-table-section"] [aria-expanded]')
+            ->assertSee('Viewport table record');
+
+        expect($page->script('window.tableLoadCalls'))->toHaveCount(1);
+
+        $page->inDarkMode()
+            ->click('[data-testid="lazy-table-section"] [aria-expanded]')
+            ->assertSee('Viewport table record')
+            ->assertNoAccessibilityIssues();
     });
 });
 
@@ -245,6 +304,113 @@ describe('content grid', function (): void {
     });
 });
 
+describe('filter layout', function (): void {
+    it('accepts string layouts in `filters()`', function (string $layout, FiltersLayout $expectedLayout): void {
+        $table = livewire(TableTestComponent::class)->instance()->getTable();
+
+        $table->filters([], layout: $layout);
+
+        expect($table->getFiltersLayout())->toBe($expectedLayout);
+    })->with([
+        ['above_content', FiltersLayout::AboveContent],
+        ['above_content_collapsible', FiltersLayout::AboveContentCollapsible],
+        ['below_content', FiltersLayout::BelowContent],
+        ['before_content', FiltersLayout::BeforeContent],
+        ['after_content', FiltersLayout::AfterContent],
+        ['before_content_collapsible', FiltersLayout::BeforeContentCollapsible],
+        ['after_content_collapsible', FiltersLayout::AfterContentCollapsible],
+        ['dropdown', FiltersLayout::Dropdown],
+        ['modal', FiltersLayout::Modal],
+        ['hidden', FiltersLayout::Hidden],
+    ]);
+
+    it('preserves enum, closure, and omitted layouts in `filters()`', function (): void {
+        $table = livewire(TableTestComponent::class)->instance()->getTable();
+
+        $table->filters([], layout: FiltersLayout::Modal);
+
+        expect($table->getFiltersLayout())->toBe(FiltersLayout::Modal);
+
+        foreach ([null, '', '0'] as $layout) {
+            $table->filters([], layout: $layout);
+
+            expect($table->getFiltersLayout())->toBe(FiltersLayout::Modal);
+        }
+
+        $layout = FiltersLayout::AboveContent;
+        $table->filters([], layout: static function (Table $table) use (&$layout): FiltersLayout {
+            return $layout;
+        });
+
+        expect($table->getFiltersLayout())->toBe(FiltersLayout::AboveContent);
+
+        $layout = FiltersLayout::BelowContent;
+
+        expect($table->getFiltersLayout())->toBe(FiltersLayout::BelowContent)
+            ->and($table->filters([], layout: static fn () => null)->getFiltersLayout())->toBe(FiltersLayout::Dropdown);
+    });
+
+    it('rejects unknown string layouts in `filters()`', function (): void {
+        $table = livewire(TableTestComponent::class)->instance()->getTable();
+
+        expect(static fn () => $table->filters([], layout: 'not_a_layout'))->toThrow(TypeError::class);
+    });
+});
+
+describe('record action position', function (): void {
+    it('accepts string positions in `recordActions()` and `actions()`', function (string $position, RecordActionsPosition $expectedPosition): void {
+        $table = livewire(TableTestComponent::class)->instance()->getTable();
+
+        $table->recordActions([], position: $position);
+
+        expect($table->getRecordActionsPosition())->toBe($expectedPosition);
+
+        $table->recordActionsPosition(($expectedPosition === RecordActionsPosition::AfterContent) ? RecordActionsPosition::BeforeColumns : RecordActionsPosition::AfterContent);
+        $table->actions([], position: $position);
+
+        expect($table->getRecordActionsPosition())->toBe($expectedPosition);
+    })->with([
+        ['after_cells', RecordActionsPosition::AfterCells],
+        ['after_columns', RecordActionsPosition::AfterColumns],
+        ['after_content', RecordActionsPosition::AfterContent],
+        ['before_cells', RecordActionsPosition::BeforeCells],
+        ['before_columns', RecordActionsPosition::BeforeColumns],
+    ]);
+
+    it('preserves enum, closure, and omitted positions in `recordActions()`', function (): void {
+        $table = livewire(TableTestComponent::class)->instance()->getTable();
+
+        $table->recordActions([], position: RecordActionsPosition::BeforeColumns);
+
+        expect($table->getRecordActionsPosition())->toBe(RecordActionsPosition::BeforeColumns);
+
+        foreach ([null, '', '0'] as $position) {
+            $table->recordActions([], position: $position);
+
+            expect($table->getRecordActionsPosition())->toBe(RecordActionsPosition::BeforeColumns);
+        }
+
+        $position = RecordActionsPosition::BeforeCells;
+        $table->recordActions([], position: static function (Table $table) use (&$position): RecordActionsPosition {
+            return $position;
+        });
+
+        expect($table->getRecordActionsPosition())->toBe(RecordActionsPosition::BeforeCells);
+
+        $position = RecordActionsPosition::AfterCells;
+
+        expect($table->getRecordActionsPosition())->toBe(RecordActionsPosition::AfterCells)
+            ->and($table->recordActions([], position: static fn () => null)->getRecordActionsPosition())->toBe(RecordActionsPosition::AfterColumns);
+    });
+
+    it('rejects unknown string positions in `recordActions()` and `actions()`', function (): void {
+        $table = livewire(TableTestComponent::class)->instance()->getTable();
+
+        expect(static fn () => $table->recordActions([], position: 'not_a_position'))->toThrow(TypeError::class)
+            ->and(static fn () => $table->actions([], position: 'not_a_position'))->toThrow(TypeError::class);
+    });
+});
+
 describe('sorting', function (): void {
     it('ignores a persisted sort on a toggled-hidden column until it is shown again', function (string $sortColumn): void {
         $firstUser = User::factory()->create(['name' => 'Charlie', 'email' => 'bravo@example.com']);
@@ -366,6 +532,203 @@ describe('sorting', function (): void {
 });
 
 describe('pagination', function (): void {
+    it('can opt in to `enforcePaginationPageOptions()` and evaluate its condition', function (): void {
+        $table = livewire(TableTestComponent::class)->instance()->getTable();
+
+        expect($table->enforcesPaginationPageOptions())->toBeFalse();
+
+        $table->enforcePaginationPageOptions();
+
+        expect($table->enforcesPaginationPageOptions())->toBeTrue();
+
+        $table->enforcePaginationPageOptions(static fn (): bool => false);
+
+        expect($table->enforcesPaginationPageOptions())->toBeFalse();
+    });
+
+    it('preserves unrestricted page sizes by default', function (): void {
+        $posts = Post::factory()->count(13)->create();
+
+        Table::configureUsing(
+            static fn (Table $table): Table => $table->defaultSort('id'),
+            during: function () use ($posts): void {
+                livewire(TableTestComponent::class)
+                    ->set('tableRecordsPerPage', 7)
+                    ->assertSet('tableRecordsPerPage', 7)
+                    ->assertCanSeeTableRecords($posts->take(7), inOrder: true)
+                    ->assertCanNotSeeTableRecords($posts->skip(7));
+            },
+        );
+    });
+
+    it('enforces configured page sizes before rendering and persisting updates', function (PaginationMode $mode, bool $persistsInSession): void {
+        $posts = Post::factory()->count(13)->create();
+
+        Table::configureUsing(
+            static fn (Table $table): Table => $table
+                ->enforcePaginationPageOptions()
+                ->paginationPageOptions(static fn (): array => [3, 8])
+                ->defaultPaginationPageOption(8)
+                ->paginationMode($mode)
+                ->persistRecordsPerPageInSession($persistsInSession)
+                ->defaultSort('id'),
+            during: function () use ($posts, $persistsInSession): void {
+                $component = livewire(TableTestComponent::class);
+                $sessionKey = $component->instance()->getTablePerPageSessionKey();
+
+                foreach ([7, 'all', 1000000, null, true, []] as $pageSize) {
+                    $component
+                        ->set('tableRecordsPerPage', $pageSize)
+                        ->assertSuccessful()
+                        ->assertSet('tableRecordsPerPage', 8)
+                        ->assertCanSeeTableRecords($posts->take(8), inOrder: true)
+                        ->assertCanNotSeeTableRecords($posts->skip(8));
+
+                    expect(session()->has($sessionKey))->toBe($persistsInSession);
+
+                    if ($persistsInSession) {
+                        expect(session()->get($sessionKey))->toBe(8);
+                    }
+                }
+
+                $component
+                    ->set('tableRecordsPerPage', '3')
+                    ->assertSet('tableRecordsPerPage', '3')
+                    ->assertCanSeeTableRecords($posts->take(3), inOrder: true)
+                    ->assertCanNotSeeTableRecords($posts->skip(3));
+
+                livewire(TableTestComponent::class)
+                    ->assertSet('tableRecordsPerPage', $persistsInSession ? '3' : 8);
+            },
+        );
+    })->with([PaginationMode::Default, PaginationMode::Simple, PaginationMode::Cursor])->with([true, false]);
+
+    it('allows `all` when it is explicitly listed', function (): void {
+        $posts = Post::factory()->count(13)->create();
+
+        Table::configureUsing(
+            static fn (Table $table): Table => $table
+                ->enforcePaginationPageOptions()
+                ->paginated([3, 'all'])
+                ->defaultSort('id'),
+            during: function () use ($posts): void {
+                livewire(TableTestComponent::class)
+                    ->set('tableRecordsPerPage', 'all')
+                    ->assertSet('tableRecordsPerPage', 'all')
+                    ->assertCanSeeTableRecords($posts, inOrder: true);
+
+                livewire(TableTestComponent::class)
+                    ->assertSet('tableRecordsPerPage', 'all')
+                    ->assertCanSeeTableRecords($posts, inOrder: true);
+            },
+        );
+    });
+
+    it('uses a fixed PHP page size when no pagination options are listed', function (string $componentClass, ?int $defaultPageSize, int $expectedPageSize): void {
+        $posts = Post::factory()->count(13)->create();
+
+        Table::configureUsing(
+            static fn (Table $table): Table => $table
+                ->enforcePaginationPageOptions()
+                ->paginationPageOptions([])
+                ->defaultPaginationPageOption($defaultPageSize)
+                ->defaultSort('id'),
+            during: function () use ($posts, $componentClass, $expectedPageSize): void {
+                $component = livewire($componentClass)
+                    ->assertSet('tableRecordsPerPage', $expectedPageSize);
+                $sessionKey = $component->instance()->getTablePerPageSessionKey();
+
+                foreach (['all', 11, null] as $pageSize) {
+                    $component
+                        ->set('tableRecordsPerPage', $pageSize)
+                        ->assertSuccessful()
+                        ->assertSet('tableRecordsPerPage', $expectedPageSize)
+                        ->assertCanSeeTableRecords($posts->take($expectedPageSize), inOrder: true)
+                        ->assertCanNotSeeTableRecords($posts->skip($expectedPageSize));
+
+                    expect(session()->get($sessionKey))->toBe($expectedPageSize);
+                }
+
+                session()->put($sessionKey, 1000000);
+
+                livewire($componentClass)
+                    ->assertSet('tableRecordsPerPage', $expectedPageSize)
+                    ->assertCanSeeTableRecords($posts->take($expectedPageSize), inOrder: true)
+                    ->assertCanNotSeeTableRecords($posts->skip($expectedPageSize));
+            },
+        );
+    })->with([
+        'configured default' => [TableTestComponent::class, 7, 7],
+        'initialized Livewire property' => [FixedPageSizeTableTestComponent::class, null, 7],
+        'configured default overrides the initial property' => [FixedPageSizeTableTestComponent::class, 8, 8],
+        'no PHP size specified' => [TableTestComponent::class, null, 10],
+    ]);
+
+    it('prevents client updates to the initial PHP page size', function (): void {
+        $component = livewire(FixedPageSizeTableTestComponent::class);
+
+        expect(fn () => $component->set('initialTableRecordsPerPage', 'all'))
+            ->toThrow(CannotUpdateLockedPropertyException::class);
+    });
+
+    it('does not reuse an earlier client selection when a table becomes fixed-size', function (bool $startsEnforced): void {
+        $posts = Post::factory()->count(13)->create();
+        $enforcesOptions = $startsEnforced;
+        $hasOptions = $startsEnforced;
+
+        Table::configureUsing(
+            static function (Table $table) use (&$enforcesOptions, &$hasOptions, $startsEnforced): Table {
+                return $table
+                    ->enforcePaginationPageOptions(static function () use (&$enforcesOptions): bool {
+                        return $enforcesOptions;
+                    })
+                    ->paginationPageOptions(static function () use (&$hasOptions): array {
+                        return $hasOptions ? [7, 'all'] : [];
+                    })
+                    ->defaultPaginationPageOption($startsEnforced ? 7 : null)
+                    ->defaultSort('id');
+            },
+            during: function () use ($posts, &$enforcesOptions, &$hasOptions): void {
+                $component = livewire(FixedPageSizeTableTestComponent::class)
+                    ->set('tableRecordsPerPage', 'all')
+                    ->assertCanSeeTableRecords($posts, inOrder: true);
+
+                $enforcesOptions = true;
+                $hasOptions = false;
+
+                $component
+                    ->set('tableRecordsPerPage', 8)
+                    ->assertSet('tableRecordsPerPage', 7)
+                    ->assertCanSeeTableRecords($posts->take(7), inOrder: true)
+                    ->assertCanNotSeeTableRecords($posts->skip(7));
+            },
+        );
+    })->with([
+        'removing the options' => true,
+        'enabling enforcement' => false,
+    ]);
+
+    it('validates session page sizes against the configured options', function (mixed $pageSize, int | string $expectedPageSize): void {
+        Table::configureUsing(
+            static fn (Table $table): Table => $table
+                ->enforcePaginationPageOptions()
+                ->paginated([3, 8])
+                ->defaultPaginationPageOption(8),
+            during: function () use ($pageSize, $expectedPageSize): void {
+                $component = livewire(TableTestComponent::class);
+                $sessionKey = $component->instance()->getTablePerPageSessionKey();
+                session()->put($sessionKey, $pageSize);
+
+                livewire(TableTestComponent::class)
+                    ->assertSet('tableRecordsPerPage', $expectedPageSize);
+            },
+        );
+    })->with([
+        'numeric string' => ['3', '3'],
+        'off-list value' => [7, 3],
+        'boolean' => [true, 3],
+    ]);
+
     it('respects scoped bounds when selecting the current page with `allowDuplicates()`', function (bool $usesOffset): void {
         $ticket = Ticket::factory()->create();
         $department = Department::factory()->create();
@@ -563,7 +926,7 @@ describe('session persistence', function (): void {
             ->assertSet('tableColumns', $reorderedColumns)
             ->set('tableRecordsPerPage', 10)
             ->call('resetTableSearch')
-            ->call('resetTableColumnSearches')
+            ->call('resetTableColumnSearch', 'title')
             ->set('tableSort', null)
             ->set('tableGrouping', null)
             ->resetTableFilters()
@@ -781,7 +1144,7 @@ describe('rendering', function (): void {
             ->assertSuccessful()
             ->html();
 
-        expect(substr_count($html, 'wire:target="sortTable(\'title\')"'))->toBe(3);
+        expect(substr_count($html, 'wire:target="sortTable(\'title\')"'))->toBe(2);
     });
 
     it('preserves the header sort loading indicator when the loading skeleton is enabled', function (): void {
@@ -791,7 +1154,7 @@ describe('rendering', function (): void {
             ->assertSuccessful()
             ->html();
 
-        expect(substr_count($html, 'wire:target="sortTable(\'title\')"'))->toBe(3);
+        expect(substr_count($html, 'wire:target="sortTable(\'title\')"'))->toBe(2);
     });
 
     it('replaces the empty state icon with a loading indicator during updates that change the displayed records', function (): void {
@@ -866,15 +1229,15 @@ describe('rendering', function (): void {
             ->and($contentAfterData['records'])->toBe($contentBeforeData['records']);
     });
 
-    it('provides unloaded and loaded records to content render hooks when table loading is deferred', function (): void {
+    it('provides unloaded and loaded records to content render hooks with lazy loading', function (string $loadingMethod): void {
         $contentBeforeData = null;
         $contentAfterData = null;
 
-        registerTableContentRenderHooks(DeferredLoadingTableTestComponent::class, $contentBeforeData, $contentAfterData);
+        registerTableContentRenderHooks(LazyLoadedTableTestComponent::class, $contentBeforeData, $contentAfterData);
 
         Post::factory()->create();
 
-        $component = livewire(DeferredLoadingTableTestComponent::class)
+        $component = livewire(LazyLoadedTableTestComponent::class, ['loadingMethod' => $loadingMethod])
             ->assertSuccessful();
 
         expect($contentBeforeData['hasPagination'])->toBeFalse()
@@ -887,7 +1250,7 @@ describe('rendering', function (): void {
             ->and($contentBeforeData['records'])->toBeInstanceOf(LengthAwarePaginator::class)
             ->and($contentBeforeData['records'])->toHaveCount(1)
             ->and($contentAfterData['records'])->toBe($contentBeforeData['records']);
-    });
+    })->with(['lazyLoaded', 'deferLoading']);
 
     it('provides a collection and no pagination to content render hooks when pagination is disabled', function (): void {
         $contentBeforeData = null;
@@ -1018,6 +1381,14 @@ class StripedTableTestComponent extends TableTestComponent
     }
 }
 
+class FixedPageSizeTableTestComponent extends TableTestComponent
+{
+    public function mount(): void
+    {
+        $this->tableRecordsPerPage = 7;
+    }
+}
+
 class LoadingSkeletonTableTestComponent extends TableTestComponent
 {
     public function table(Table $table): Table
@@ -1139,12 +1510,14 @@ class EmptyStateTableTestComponent extends TableTestComponent
     }
 }
 
-class DeferredLoadingTableTestComponent extends TableTestComponent
+class LazyLoadedTableTestComponent extends TableTestComponent
 {
+    public string $loadingMethod = 'lazyLoaded';
+
     public function table(Table $table): Table
     {
         return parent::table($table)
-            ->deferLoading();
+            ->{$this->loadingMethod}();
     }
 }
 

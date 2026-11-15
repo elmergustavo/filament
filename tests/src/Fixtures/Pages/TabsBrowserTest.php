@@ -3,6 +3,8 @@
 namespace Filament\Tests\Fixtures\Pages;
 
 use BackedEnum;
+use Filament\Actions\Action;
+use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\TextInput;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\Group;
@@ -20,6 +22,12 @@ class TabsBrowserTest extends Page
     protected static ?int $navigationSort = 15;
 
     public ?array $data = [];
+
+    public bool $hasLazyLoadedBadges = false;
+
+    public bool $livewireTabs = false;
+
+    public string $activeProfileTab = '0';
 
     public ?string $activeTab = 'second';
 
@@ -41,6 +49,8 @@ class TabsBrowserTest extends Page
 
     public bool $hasNativeValidation = false;
 
+    public bool $showRepeater = false;
+
     public bool $isSaved = false;
 
     public function mount(): void
@@ -51,6 +61,9 @@ class TabsBrowserTest extends Page
         $this->isRightToLeft = request()->boolean('rtl');
         $this->hasDisabledProfileHeader = request()->boolean('disabled-profile');
         $this->hasNativeValidation = request()->boolean('native-validation');
+        $this->showRepeater = request()->boolean('repeater');
+        $this->hasLazyLoadedBadges = request()->boolean('lazy-loaded-badges');
+        $this->livewireTabs = request()->boolean('livewire');
         $this->form->fill();
     }
 
@@ -62,13 +75,16 @@ class TabsBrowserTest extends Page
                     ->key('profile')
                     ->id('profile-tabs')
                     ->persistTabInQueryString()
+                    ->livewireProperty($this->livewireTabs ? 'activeProfileTab' : null)
                     ->tabs([
                         Tab::make('Account')
                             ->key('account')
                             ->id('profile-account')
                             ->extraAttributes(fn (): array => $this->hasDisabledProfileHeader ? ['disabled' => true] : [])
                             ->badge('Available')
+                            ->lazyLoadedBadge($this->hasLazyLoadedBadges)
                             ->badgeIcon(Heroicon::OutlinedCheckCircle)
+                            ->extraAttributes(['data-testid' => 'lazy-loaded-tab'], merge: true)
                             ->schema([
                                 TextInput::make('username')
                                     ->label('Username')
@@ -83,6 +99,14 @@ class TabsBrowserTest extends Page
                                     ->label('Phone Number')
                                     ->tel()
                                     ->required(fn (): bool => $this->hasNativeValidation),
+                                Repeater::make('items')
+                                    ->visible(fn (): bool => $this->showRepeater)
+                                    ->default(array_map(static fn (int $number): array => ['name' => "Item {$number}"], range(1, 30)))
+                                    ->deleteAction(static fn (Action $action): Action => $action->extraAttributes(['data-testid' => 'delete-item']))
+                                    ->schema([
+                                        TextInput::make('name')
+                                            ->extraInputAttributes(['data-testid' => 'item-name']),
+                                    ]),
                             ]),
                         Tab::make('Billing')->key('billing')->id('profile-billing')
                             ->visible(fn (): bool => $this->hasDisabledProfileHeader),
@@ -106,7 +130,7 @@ class TabsBrowserTest extends Page
                     ->scrollable(false)
                     ->tabs([
                         Tab::make('Overview and activity')->key('overview'),
-                        Tab::make('Contact information')->key('contact')->badge('12')->deferBadge(),
+                        Tab::make('Contact information')->key('contact')->badge('12')->lazyLoadedBadge(),
                         Tab::make('Billing information')->key('billing'),
                         Tab::make('Security settings')->key('security'),
                         Tab::make('Additional preferences')->key('hidden')->visibleJs('showOverflowChoice'),

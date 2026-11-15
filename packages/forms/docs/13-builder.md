@@ -430,7 +430,7 @@ Builder::make('content')
 
 <UtilityInjection set="formFields">As well as allowing static values, the `collapsible()` and `collapsed()` methods also accept functions to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
 
-If collapsed items contain components that are expensive to render, you can [defer the loading of their block schemas](#deferring-the-loading-of-block-schemas) until they are expanded.
+If collapsed items contain components that are expensive to render, you can [lazy load their block schemas](#lazy-loading-block-schemas) when they are expanded.
 
 ## Cloning items
 
@@ -594,7 +594,7 @@ Block::make('heading')
 
 All form components are able to [use `$get()` and `$set()`](overview#injecting-the-state-of-another-field) to access another field's value. However, you might experience unexpected behavior when using this inside the builder's schema.
 
-This is because `$get()` and `$set()`, by default, are scoped to the current builder item. This means that you are able to interact with another field inside that builder item easily without knowing which builder item the current form component belongs to.
+This is because `$get()` and `$set()`, by default, are scoped to the current builder item's `data` array. This means that you are able to interact with another field inside that builder item easily without knowing which builder item the current form component belongs to.
 
 The consequence of this is that you may be confused when you are unable to interact with a field outside the builder. We use `../` syntax to solve this problem - `$get('../parent_field_name')`.
 
@@ -606,7 +606,10 @@ Consider your form has this data structure:
 
     'builder' => [
         'item1' => [
-            'service_id' => 2,
+            'type' => 'service',
+            'data' => [
+                'service_id' => 2,
+            ],
         ],
     ],
 ]
@@ -614,11 +617,17 @@ Consider your form has this data structure:
 
 You are trying to retrieve the value of `client_id` from inside the builder item.
 
-`$get()` is relative to the current builder item, so `$get('client_id')` is looking for `$get('builder.item1.client_id')`.
+`$get()` is relative to the current builder item's `data` array, so `$get('client_id')` looks for `builder.item1.data.client_id` in the form data.
 
-You can use `../` to go up a level in the data structure, so `$get('../client_id')` is `$get('builder.client_id')` and `$get('../../client_id')` is `$get('client_id')`.
+You can use `../` to go up a level in the data structure:
 
-The special case of `$get()` with no arguments, or `$get('')` or `$get('./')`, will always return the full data array for the current builder item.
+- `$get('../client_id')` looks for `builder.item1.client_id`.
+- `$get('../../client_id')` looks for `builder.client_id`.
+- `$get('../../../client_id')` reaches `client_id` at the root of the form data shown above and returns `1`.
+
+If the form has its own state path, these paths remain relative to that form's data, not the entire Livewire component.
+
+The special case of `$get()` with no arguments, or `$get('')` or `$get('./')`, returns the current block's `data` array, `['service_id' => 2]`, not the enclosing item with its `type` and `data` keys.
 
 ## Builder validation
 
@@ -641,9 +650,34 @@ Builder::make('content')
 
 <UtilityInjection set="formFields">As well as allowing static values, the `minItems()` and `maxItems()` methods also accept a function to dynamically calculate them. You can inject various utilities into the function as parameters.</UtilityInjection>
 
-## Deferring the loading of block schemas
+> [!NOTE]
+> `maxItems()` is a validation rule. Filament can build and render item schemas before validation rejects excessive item counts. To avoid long processing times if your application accidentally creates too many items, you can [limit item processing](#limiting-item-processing) separately.
 
-If a block's schema is expensive to render, you can pass a `Schema` object to `schema()` and use `deferLoading()`. This is particularly useful when items are [collapsed](#collapsing-items) by default. Each block item schema will be loaded independently when its item is expanded and enters the viewport:
+## Limiting item processing
+
+If your application's JavaScript accidentally creates a large state array, building and rendering a schema for every block can cause a long wait. You can opt in to a processing limit using `maxItemsForProcessing()`. If the raw state exceeds this limit, Filament aborts with an HTTP 413 response before building the builder's item schemas, without truncating the data. All raw items count towards the limit, including items with unrecognized block types:
+
+```php
+use Filament\Forms\Components\Builder;
+
+Builder::make('content')
+    ->blocks([
+        // ...
+    ])
+    ->maxItems(5)
+    ->maxItemsForProcessing(100)
+```
+
+The processing limit is independent of `maxItems()` validation and is disabled by default. It accepts an integer, or `null` to disable it. It limits the number of items in each builder, not the total number of nested items or fields in a request.
+
+> [!CAUTION]
+> The processing limit also applies to existing data loaded from your database. A record above the limit cannot be opened through that form until you raise the limit or correct its data elsewhere. Choose a limit that accommodates existing records you need to edit, including records above your validation limit.
+
+This is an opt-in performance safeguard, not a security boundary or a guarantee of request duration. See the shared [guidance on configuring processing limits globally](repeater#applying-processing-limits-globally) for repeaters, builders, and repeatable entries, including increasing, decreasing, or disabling the limit on individual components and the scope of the processing limit.
+
+## Lazy loading block schemas
+
+If a block's schema is expensive to render, you can pass a `Schema` object to `schema()` and use `lazyLoaded()`. This is particularly useful when items are [collapsed](#collapsing-items) by default. Each block item schema will be loaded independently when its item is expanded and enters the viewport:
 
 ```php
 use Filament\Forms\Components\Builder;
@@ -661,14 +695,14 @@ Builder::make('content')
                             ->label('Heading')
                             ->required(),
                     ])
-                    ->deferLoading(),
+                    ->lazyLoaded(),
             ),
         // ...
     ])
     ->collapsed()
 ```
 
-Builder block item schemas automatically receive unique keys from their item state paths. You can learn more about deferred schemas in the [schema overview](../schemas/overview#deferring-the-loading-of-a-child-schema).
+Builder block item schemas automatically receive unique keys from their item state paths. You can learn more about lazy schemas in the [schema overview](../schemas/overview#lazy-loading-a-child-schema).
 
 ## Customizing the builder item actions
 
@@ -720,9 +754,8 @@ Builder::make('content')
     )
 ```
 
-<Aside variant="info">
-    The `addAction()`, `addBetweenAction()`, `collapseAction()`, `collapseAllAction()`, `expandAction()` and `expandAllAction()` methods do not support confirmation modals, as clicking their buttons does not make the network request that is required to show the modal.
-</Aside>
+> [!NOTE]
+> The `addAction()`, `addBetweenAction()`, `collapseAction()`, `collapseAllAction()`, `expandAction()` and `expandAllAction()` methods do not support confirmation modals, as clicking their buttons does not make the network request that is required to show the modal.
 
 Completing a drag that changes the block order invokes `reorderAction()`, which supports `requiresConfirmation()`. Clicking the drag handle alone does not invoke the action.
 
@@ -766,7 +799,7 @@ Builder::make('content')
 
 In this example, `$arguments['item']` gives you the ID of the current builder item. You can validate the data in that builder item using the `getItemState()` method on the builder component. This method returns the validated data for the item. If the item is not valid, it will cancel the action and show an error message for that item in the form.
 
-If you want to get the raw data from the current item without validating it, you can use `$component->getRawItemState($arguments['item'])` instead.
+If you want to get a snapshot of the current item's state without validating it, you can use `$component->getItemStateSnapshot($arguments['item'])` instead. The snapshot still applies state transformations.
 
 If you want to manipulate the raw data for the entire builder, for example, to add, remove or modify items, you can use `$component->getState()` to get the data, and `$component->state($state)` to set it again:
 

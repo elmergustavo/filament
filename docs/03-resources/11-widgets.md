@@ -71,13 +71,14 @@ If you're using a widget on an [Edit](editing-records) or [View](viewing-records
 
 ```php
 use Illuminate\Database\Eloquent\Model;
+use Livewire\Attributes\Locked;
 
+#[Locked]
 public ?Model $record = null;
 ```
 
-<Aside variant="warning">
-    Filament leaves widget model properties, including `$record` and `$parentRecord`, to Livewire's native restoration. It does not reapply global scopes, the resource query, or a policy for those records. A request to the widget does not reauthorize the parent page. The widget's `canView()` method controls access to the widget, not its records. Query and authorize records before using them, including any tenant or ownership restrictions. See [Eloquent model restoration in Livewire](../advanced/security#understanding-eloquent-model-restoration-in-livewire) for more information.
-</Aside>
+> [!WARNING]
+> Filament leaves widget model properties, including `$record` and `$parentRecord`, to Livewire's native restoration. It does not reapply global scopes, the resource query, or a policy for those records. A request to the widget does not reauthorize the parent page. The widget's `canView()` method controls access to the widget, not its records. Query and authorize records before using them, including any tenant or ownership restrictions. See [Eloquent model restoration in Livewire](../advanced/security#understanding-eloquent-model-restoration-in-livewire) for more information.
 
 ## Accessing page table data in the widget
 
@@ -131,9 +132,8 @@ use Filament\Widgets\StatsOverviewWidget\Stat;
 Stat::make('Total Products', $this->getPageTableRecords()->count()),
 ```
 
-<Aside variant="warning">
-    `InteractsWithPageTable` uses the page's table query, not each record's `view()` policy. Add query restrictions for records that must not be included in the widget's data. For nested resources, parent binding and ancestor resource access checks do not replace parent-record policy checks. This trait also does not protect other uses of model properties on your widget. See [Eloquent model restoration in Livewire](../advanced/security#understanding-eloquent-model-restoration-in-livewire) for the binding rules and your authorization responsibilities.
-</Aside>
+> [!WARNING]
+> `InteractsWithPageTable` uses the page's table query, not each record's `view()` policy. Add query restrictions for records that must not be included in the widget's data. For nested resources, parent binding and ancestor resource access checks do not replace parent-record policy checks. This trait also does not protect other uses of model properties on your widget. See [Eloquent model restoration in Livewire](../advanced/security#understanding-eloquent-model-restoration-in-livewire) for the binding rules and your authorization responsibilities.
 
 ### Accessing the total table records count
 
@@ -166,13 +166,15 @@ This array of properties gets mapped to [public Livewire properties](https://liv
 
 ```php
 use Filament\Widgets\Widget;
+use Livewire\Attributes\Locked;
 
 class CustomerOverview extends Widget
 {
+    #[Locked]
     public string $status;
 
     // ...
 }
 ```
 
-Now, you can access the `status` in the widget class using `$this->status`.
+Now, you can access the `status` in the widget class using `$this->status`. [`#[Locked]`](../advanced/security#protecting-server-managed-component-state) prevents client-side changes to this configuration.

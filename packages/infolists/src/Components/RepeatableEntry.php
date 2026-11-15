@@ -7,6 +7,7 @@ use Closure;
 use Exception;
 use Filament\Infolists\Components\RepeatableEntry\TableColumn;
 use Filament\Schemas\Components\Component;
+use Filament\Schemas\Components\Concerns\CanLimitItemsForProcessing;
 use Filament\Schemas\Components\Concerns\HasContainerGridLayout;
 use Filament\Schemas\Schema;
 use Filament\Support\Components\Contracts\HasEmbeddedView;
@@ -23,6 +24,7 @@ use Traversable;
 class RepeatableEntry extends Entry implements HasEmbeddedView
 {
     use CanBeContained;
+    use CanLimitItemsForProcessing;
     use HasContainerGridLayout;
 
     /**
@@ -84,6 +86,8 @@ class RepeatableEntry extends Entry implements HasEmbeddedView
     {
         $state = $this->normalizeItemsState($this->getState() ?? []);
 
+        $this->ensureItemsCanBeProcessed(is_array($state) ? count($state) : 0);
+
         $this->cachedItemsState = $state;
 
         $containers = [];
@@ -114,7 +118,7 @@ class RepeatableEntry extends Entry implements HasEmbeddedView
 
     protected function isCachedDefaultChildSchemaFresh(string | int $key): bool
     {
-        [$hasItem, $itemState] = $this->getItemState($this->getState() ?? [], $key);
+        [$hasItem, $itemState] = $this->getItemStateWithExistence($this->getState() ?? [], $key);
 
         return $hasItem
             && is_array($this->cachedItemsState)
@@ -123,9 +127,19 @@ class RepeatableEntry extends Entry implements HasEmbeddedView
     }
 
     /**
+     * @deprecated Use `getItemStateWithExistence()` instead.
+     *
      * @return array{bool, mixed}
      */
     protected function getItemState(mixed $state, string | int $key): array
+    {
+        return $this->getItemStateWithExistence($state, $key);
+    }
+
+    /**
+     * @return array{bool, mixed}
+     */
+    protected function getItemStateWithExistence(mixed $state, string | int $key): array
     {
         if ($state instanceof Generator) {
             $state = $this->normalizeItemsState($state);
@@ -328,7 +342,10 @@ class RepeatableEntry extends Entry implements HasEmbeddedView
                                     <?php $counter++ ?>
 
                                     <?php if ($component->isVisible()) { ?>
-                                        <td>
+                                        <td
+                                            wire:key="<?= e($component->getLivewireKey()) ?>"
+                                            x-data="filamentSchemaComponent(<?= Js::from($component->getAlpineScopeConfiguration()) ?>)"
+                                        >
                                             <?= $component->toHtml() ?>
                                         </td>
                                     <?php } else { ?>

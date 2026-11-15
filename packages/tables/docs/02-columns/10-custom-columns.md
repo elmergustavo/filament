@@ -25,9 +25,8 @@ class AudioPlayerColumn extends Column
 
 It will also create a view file at `resources/views/filament/tables/columns/audio-player-column.blade.php`.
 
-<Aside variant="info">
-    Filament table columns are **not** Livewire components. Defining public properties and methods on a table column class will not make them accessible in the Blade view.
-</Aside>
+> [!NOTE]
+> Filament table columns are **not** Livewire components. Public properties are not automatically available as variables in the Blade view. Public methods are available as variable functions, such as `$getState()`, or through the `$column` instance. Making a method public does not automatically expose it to remote calls from Livewire.
 
 ## Accessing the state of the column in the Blade view
 
@@ -186,7 +185,7 @@ Then, style the column while it is inside the loading table content. The loading
         position: absolute;
         inset: 0;
         animation: var(--loading-skeleton-animation);
-        background-color: var(--loading-skeleton-background-color);
+        background-color: var(--loading-skeleton-bg);
         border-radius: var(--loading-skeleton-border-radius);
     }
 

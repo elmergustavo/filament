@@ -5,9 +5,8 @@ title: Security
 
 ## Introduction
 
-<Aside variant="info">
-    This page provides a general overview of security considerations when using Filament. Many individual features have their own specific security recommendations documented alongside them — for example, file uploads, rich editors, inline editable columns, and more. When using any Filament feature, make sure to read the full documentation for that feature, including any security warnings it contains.
-</Aside>
+> [!NOTE]
+> This page provides a general overview of security considerations when using Filament. Many individual features have their own specific security recommendations documented alongside them — for example, file uploads, rich editors, inline editable columns, and more. When using any Filament feature, make sure to read the full documentation for that feature, including any security warnings it contains.
 
 Filament is a powerful framework that gives developers extensive control over how components are configured and rendered. This flexibility is by design — developers need to be able to do powerful things with configuration methods like `url()`, `icon()`, `html()`, and others. However, this means that Filament trusts the values you pass into these methods, and it is your responsibility to ensure that any user-supplied data is properly validated and sanitized before it reaches Filament.
 
@@ -19,9 +18,8 @@ This page covers key security considerations when building applications with Fil
 
 Filament automatically checks [Laravel Model Policies](https://laravel.com/docs/authorization#creating-policies) for standard CRUD operations on [resources](../resources/overview#authorization). When a policy exists for a resource's model, Filament will check methods like `viewAny()`, `create()`, `update()`, `view()`, `delete()`, and others before allowing access to the corresponding pages and actions.
 
-<Aside variant="warning">
-    By default, a missing resource policy or policy method does not deny access: Filament allows the operation unless a Gate before callback denies it. Define the policy methods your application needs, or enable [strict authorization](../panel-configuration#strict-authorization-mode) to detect missing policies and methods. Strict mode does not add authorization to custom actions, inline editable columns, or other code that does not use resource authorization. Skipping authorization on a resource bypasses its policy checks even in strict mode.
-</Aside>
+> [!WARNING]
+> By default, a missing resource policy or policy method does not deny access: Filament allows the operation unless a Gate before callback denies it. Define the policy methods your application needs, or enable [strict authorization](../panel-configuration#strict-authorization-mode) to detect missing policies and methods. Strict mode does not add authorization to custom actions, inline editable columns, or other code that does not use resource authorization. Skipping authorization on a resource bypasses its policy checks even in strict mode.
 
 However, Filament's automatic authorization only covers these built-in resource operations. Any custom functionality you add — custom actions, custom pages, custom Livewire components, API endpoints, or other business logic — must be authorized by you. Filament cannot know your application's authorization requirements beyond the standard CRUD operations it provides.
 
@@ -38,6 +36,50 @@ Filament repeats its built-in authorization checks when a component mounts and o
 - Tenant registration and profile pages check `canView()`.
 
 Panel access is also checked by `canAccessPanel()` on every request, including Livewire requests.
+
+### Restricting methods to server-side calls
+
+Livewire exposes public component methods to client requests, even when there is no button or other UI that calls them. Use `protected` or `private` visibility for methods that do not need to be public. If a method must remain public so that other PHP objects can call it, you may add the `#[Unexposed]` attribute:
+
+```php
+use Filament\Support\Components\Attributes\Unexposed;
+
+#[Unexposed]
+public function recalculateTotals(): void
+{
+    // ...
+}
+```
+
+Client calls to this method, including JavaScript calls, `wire:click`, and Livewire event listeners, receive HTTP 403. Direct PHP calls still work.
+
+Methods declaring a return type of `Filament\Support\Components\Component` or a subclass, such as `form(): Schema`, `table(): Table`, or `editAction(): Action`, are automatically unexposed. This includes nullable types and any union or intersection containing a component type, including intersections nested inside unions. Types such as `mixed` and arrays are not covered.
+
+Use `#[Exposed]` to allow frontend calls, overriding either `#[Unexposed]` inherited from a parent class or the return-type default:
+
+```php
+use Filament\Support\Components\Attributes\Exposed;
+
+#[Exposed]
+public function recalculateTotals(): void
+{
+    parent::recalculateTotals();
+}
+```
+
+Overrides inherit the nearest parent-class access attribute unless they declare their own. Imported trait methods and aliases retain their attributes, but replacing a trait method does not inherit its attributes: annotate the replacement when needed. Attributes on abstract or discarded trait methods do not apply. If both attributes appear on the same method, `#[Unexposed]` wins. Other methods retain Livewire's normal behavior.
+
+These restrictions apply to Livewire component methods, not methods on schema components or table columns. They do not replace authorization or prevent internal PHP calls, including lifecycle hooks. Authorize any frontend entry points that call sensitive code. `#[Exposed]` does not bypass Livewire's own method restrictions.
+
+### Protecting server-managed component state
+
+Filament uses Livewire's `#[Locked]` attribute to prevent client-side updates to server-managed public properties. PHP assignments still work. Use supported methods and events instead of `$wire.set()` to change this state, such as `toggleTableReordering()` or `mountAction()`. Update parent-driven widget inputs through the parent page.
+
+If you redeclare a locked property, add `#[Locked]` to the new declaration too; PHP does not inherit property attributes onto redeclarations.
+
+Locked URL properties still accept initial query string values, but must keep the default replace-mode URL synchronization: push-history restoration (`#[Url(history: true)]`) requires client updates and is incompatible with locking.
+
+Locking does not hide property values or authorize access to records. Initial URL values, method arguments, and event payloads still need validation and authorization.
 
 ### Understanding Eloquent model restoration in Livewire
 
@@ -68,9 +110,8 @@ These properties are not automatically re-queried against their original resourc
 
 Table row actions resolve their record through the table query. Attach and associate actions resolve selected records through their configured relationship or options query. Filament does not provide either guarantee for model values passed to custom Livewire methods or action arguments.
 
-<Aside variant="warning">
-    Component authorization is separate from record scoping. A relation manager still runs `canViewForRecord()`, and a widget still runs `canView()`. Neither automatically reapplies the parent resource's query or authorizes a passed-in record. For a relation manager, enforce owner-record restrictions in `canViewForRecord()`. For widget or custom component code, query and authorize records before accessing them.
-</Aside>
+> [!WARNING]
+> Component authorization is separate from record scoping. A relation manager still runs `canViewForRecord()`, and a widget still runs `canView()`. Neither automatically reapplies the parent resource's query or authorizes a passed-in record. For a relation manager, enforce owner-record restrictions in `canViewForRecord()`. For widget or custom component code, query and authorize records before accessing them.
 
 #### Protecting your own model properties
 
@@ -126,9 +167,8 @@ Do not rely on the order of lifecycle hooks from different traits for authorizat
 
 After the applicable built-in authorization check, Livewire runs per-property hydration hooks, requested property updates, public methods requested by Livewire, actions, and normal rendering. This only protects models covered by that check. For example, a custom page's `canAccess()` method does not authorize each model property that you add to the page.
 
-<Aside variant="warning">
-    Filament explicitly checks widget and relation manager authorization while a lazy component is waiting to mount. Pages do not have an equivalent check during this waiting state. Do not enable Livewire lazy loading on a Filament page that relies on page authorization hooks.
-</Aside>
+> [!WARNING]
+> Filament explicitly checks widget and relation manager authorization while a lazy component is waiting to mount. Pages do not have an equivalent check during this waiting state. Do not enable Livewire lazy loading on a Filament page that relies on page authorization hooks.
 
 ### Inline editable columns
 
@@ -201,6 +241,8 @@ As a general rule: whenever you pass user-controlled data into a Filament config
 
 When rendering HTML content via methods like `html()` or `markdown()` on components such as `TextColumn` and `TextEntry`, Filament automatically sanitizes the output using Symfony's [HtmlSanitizer](https://symfony.com/doc/current/html_sanitizer.html) component. This removes potentially dangerous elements like `<script>` tags to help prevent XSS attacks.
 
+The rich content renderer sanitizes editor-authored content, but treats HTML returned by [registered custom blocks](../forms/rich-editor#rendering-content-with-custom-blocks) as trusted application HTML. Neither the block's final output nor its [preview](../forms/rich-editor#rendering-a-preview-for-a-custom-block) is automatically sanitized. Your block methods must escape or sanitize user-supplied configuration values before including them in HTML.
+
 ### Default sanitizer configuration
 
 Filament registers `HtmlSanitizerConfig` as a scoped binding in Laravel's service container with the following default configuration:
@@ -267,9 +309,8 @@ public function register(): void
 }
 ```
 
-<Aside variant="danger">
-    Removing attributes that Filament's rich editor depends on (such as `data-color`, `data-cols`, `data-id`, or `style`) may break rich text rendering. Only restrict attributes when you understand their impact on Filament's components.
-</Aside>
+> [!CAUTION]
+> Removing attributes that Filament's rich editor depends on (such as `data-color`, `data-cols`, `data-id`, or `style`) may break rich text rendering. Only restrict attributes when you understand their impact on Filament's components.
 
 #### Replacing the sanitizer configuration entirely
 
@@ -352,9 +393,8 @@ class ViewProduct extends Component implements HasSchemas
 
 With the trait in place, an attacker tampering with a Livewire request to upload to an arbitrary property name is rejected; legitimate uploads from your schema's `FileUpload` fields continue to work because their target property matches a registered component. Uploads from components that support file attachments — such as the [`MarkdownEditor`](../forms/markdown-editor) and [`RichEditor`](../forms/rich-editor) — are also allowed when they target a registered component.
 
-<Aside variant="tip">
-    Hidden fields are not considered matchable targets. If a `FileUpload` field is conditionally hidden (`->visible(false)` or equivalent), uploads to its state path are rejected — only fields the user can actually see are valid upload targets.
-</Aside>
+> [!TIP]
+> Hidden fields are not considered matchable targets. If a `FileUpload` field is conditionally hidden (`->visible(false)` or equivalent), uploads to its state path are rejected — only fields the user can actually see are valid upload targets.
 
 ## Scoping queries
 

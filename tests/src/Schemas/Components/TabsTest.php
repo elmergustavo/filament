@@ -10,6 +10,7 @@ use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Schemas\Concerns\InteractsWithSchemas;
 use Filament\Schemas\Contracts\HasSchemas;
 use Filament\Schemas\Schema;
+use Filament\Support\Components\Attributes\Exposed;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tests\Fixtures\Livewire\Livewire;
 use Filament\Tests\Fixtures\Models\User;
@@ -17,6 +18,7 @@ use Filament\Tests\TestCase;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\HtmlString;
+use Livewire\Attributes\Renderless;
 use Livewire\Component;
 
 use function Filament\Tests\livewire;
@@ -378,14 +380,25 @@ it('prefers query-string tab keys before legacy IDs', function (string $query, i
     'legacy default absolute ID' => ['form.profile.billing', 3],
 ]);
 
-it('can detect deferred badges with `hasDeferredBadges()`', function (): void {
-    livewire(TabsWithDeferredBadges::class)
-        ->assertOk();
-});
+it('can detect lazy badges through both getter names', function (string $method): void {
+    $lazyTab = Tab::make('Lazy')->badge(static fn (): int => 42)->lazyLoadedBadge();
+    $tabs = Tabs::make('Settings')->tabs([
+        Tab::make('Normal')->badge(10),
+        $lazyTab,
+    ]);
 
-it('can return deferred tab badges with `getDeferredTabBadges()`', function (): void {
-    livewire(TabsWithDeferredBadges::class)
-        ->call('callSchemaComponentMethod', 'form.test-tabs', 'getDeferredTabBadges')
+    Schema::make(Livewire::make())->components([$tabs])->getComponents();
+
+    expect($tabs->{$method}())->toBeTrue();
+
+    $lazyTab->lazyLoadedBadge(false);
+
+    expect($tabs->{$method}())->toBeFalse();
+})->with(['hasLazyLoadedBadges', 'hasDeferredBadges']);
+
+it('can return lazy tab badges through both endpoint names', function (string $method): void {
+    $component = livewire(TabsWithLazyLoadedBadges::class)
+        ->call('callSchemaComponentMethod', 'form.test-tabs', $method)
         ->assertReturned(function (array $badges): bool {
             expect($badges)->toHaveCount(1);
             expect($badges)->toHaveKey('1');
@@ -394,7 +407,42 @@ it('can return deferred tab badges with `getDeferredTabBadges()`', function (): 
 
             return true;
         });
-});
+
+    expect($component->effects)->not->toHaveKey('html')
+        ->and($component->effects['partials'] ?? [])->toBe([]);
+
+    $badges = $component->instance()->getSchemaComponent('form.test-tabs')->getLazyLoadedTabBadges();
+
+    expect($badges)->toHaveCount(1)
+        ->and($badges['1']['badge'])->toBe('42');
+})->with(['getDeferredTabBadges', 'getLazyLoadedTabBadges']);
+
+it('respects a `getLazyLoadedTabBadges()` override through both endpoint names', function (string $method): void {
+    app()->bind(Tabs::class, static fn (): Tabs => new class extends Tabs
+    {
+        #[Exposed]
+        #[Renderless]
+        public function getLazyLoadedTabBadges(): array
+        {
+            $badges = parent::getLazyLoadedTabBadges();
+            $badges['1']['badge'] = '84';
+
+            return $badges;
+        }
+    });
+
+    $component = livewire(TabsWithLazyLoadedBadges::class)
+        ->call('callSchemaComponentMethod', 'form.test-tabs', $method)
+        ->assertReturned(function (array $badges): bool {
+            expect($badges)->toHaveCount(1)
+                ->and($badges['1']['badge'])->toBe('84');
+
+            return true;
+        });
+
+    expect($component->effects)->not->toHaveKey('html')
+        ->and($component->effects['partials'] ?? [])->toBe([]);
+})->with(['getDeferredTabBadges', 'getLazyLoadedTabBadges']);
 
 it('can call an `Action` nested inside a tab that uses `livewireProperty()`', function (): void {
     livewire(TabsWithLivewirePropertyAction::class)
@@ -635,6 +683,35 @@ it('can render `Tabs` in the browser', function (): void {
         ->inDarkMode()
         ->assertNoAccessibilityIssues();
 });
+
+it('loads lazy badges when the tab bar becomes visible in both tab renderers', function (bool $livewireTabs): void {
+    $this->actingAs(User::factory()->create());
+
+    $page = visit('/tabs-browser-test?lazy-loaded-badges=1&dropdown=1&livewire=' . (int) $livewireTabs);
+    $page->page()->context()->addInitScript(<<<'JS'
+        window.tabBadgeCalls = [];
+        document.addEventListener('livewire:init', () => {
+            Livewire.hook('request', ({ options }) => {
+                window.tabBadgeCalls.push(...JSON.parse(options.body).components.flatMap(component => component.calls).filter(call => call.method === 'callSchemaComponentMethod' && call.params[1] === 'getLazyLoadedTabBadges'));
+            });
+        });
+        JS);
+    $page->refresh()->assertVisible('[data-testid="enclosing-dropdown-trigger"]');
+
+    expect($page->script('window.tabBadgeCalls'))->toBe([]);
+
+    $page->click('[data-testid="enclosing-dropdown-trigger"]')
+        ->assertSeeIn('[data-testid="lazy-loaded-tab"]', 'Available')
+        ->assertNoSmoke()
+        ->assertNoAccessibilityIssues();
+
+    expect($page->script('window.tabBadgeCalls'))->toHaveCount(1);
+
+    $page->inDarkMode()
+        ->click('[data-testid="enclosing-dropdown-trigger"]')
+        ->assertSeeIn('[data-testid="lazy-loaded-tab"]', 'Available')
+        ->assertNoAccessibilityIssues();
+})->with(['Alpine' => false, 'Livewire' => true]);
 
 it('keeps non-scrollable `Tabs` in one keyboard sequence and accessible tablist', function (): void {
     $this->actingAs(User::factory()->create());
@@ -877,7 +954,55 @@ it('retains lazy panel shells and selection through `Livewire` morphs', function
     $page->assertNoSmoke();
 });
 
-class TabsWithDeferredBadges extends Component implements HasActions, HasSchemas
+it('preserves the scroll position when deleting a `Repeater` item inside the active `Tab`', function (): void {
+    $this->actingAs(User::factory()->create());
+
+    $page = visit('/tabs-browser-test?repeater=1');
+    $deleteItem = ':nth-match([data-testid="delete-item"], 27)';
+
+    $page->click('#profile-tabs [data-tab-key="contact"]')
+        ->assertVisible('#profile-contact')
+        ->assertCount('[data-testid="item-name"]', 30);
+
+    $page->page()->locator($deleteItem)->scrollIntoViewIfNeeded();
+    $page->assertScript('window.scrollY > window.innerHeight', true);
+    $scrollPosition = $page->script('window.scrollY');
+
+    $page->click($deleteItem)
+        ->assertCount('[data-testid="item-name"]', 29)
+        ->assertValue(':nth-match([data-testid="item-name"], 27)', 'Item 28');
+
+    // Allow deferred focus recovery to finish before checking the scroll position.
+    $page->script('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+
+    $page->assertScript('window.scrollY', $scrollPosition)
+        ->assertNoSmoke();
+});
+
+it('binds named and general exposed method calls to the active `Tab`', function (): void {
+    $this->actingAs(User::factory()->create());
+
+    $page = visit('/schema-component-scope-browser-test?scenario=tabs');
+
+    $page->click('#first-tab [data-testid=named-scope]')
+        ->assertSeeIn('#first-tab output', 'Tab: First tab: Named')
+        ->click('#first-tab [data-testid=general-scope]')
+        ->assertSeeIn('#first-tab output', 'Tab: First tab: General')
+        ->click('#method-tabs [data-tab-key=second]')
+        ->click('#second-tab [data-testid=named-scope]')
+        ->assertSeeIn('#second-tab output', 'Tab: Second tab: Named')
+        ->click('#second-tab [data-testid=general-scope]')
+        ->assertSeeIn('#second-tab output', 'Tab: Second tab: General')
+        ->click('#method-tabs [data-tab-key=first]')
+        ->click('#first-tab [data-testid=named-scope]')
+        ->assertSeeIn('#first-tab output', 'Tab: First tab: Named')
+        ->assertNoSmoke()
+        ->assertNoAccessibilityIssues();
+
+    $page->inDarkMode()->assertNoAccessibilityIssues();
+});
+
+class TabsWithLazyLoadedBadges extends Component implements HasActions, HasSchemas
 {
     use InteractsWithActions;
     use InteractsWithSchemas;
@@ -899,9 +1024,9 @@ class TabsWithDeferredBadges extends Component implements HasActions, HasSchemas
                         Tab::make('Normal Tab')
                             ->badge(10)
                             ->schema([]),
-                        Tab::make('Deferred Tab')
+                        Tab::make('Lazy-loaded Tab')
                             ->badge(static fn (): int => 42)
-                            ->deferBadge()
+                            ->lazyLoadedBadge()
                             ->schema([]),
                     ]),
             ])

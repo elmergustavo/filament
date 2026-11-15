@@ -131,7 +131,7 @@ When you have multiple panels (e.g., `admin`, `app`, `portal`), you'll often wan
 
 ### Basic conditional registration
 
-To register a plugin for all panels except one:
+To register a plugin only for the `admin` panel:
 
 ```php
 namespace Modules\Alerts\Providers;
@@ -294,9 +294,8 @@ Panel::configureUsing(function (Panel $panel): void {
 });
 ```
 
-<Aside variant="info">
-    The `Panel::configureUsing()` approach is powerful because it allows modules to configure themselves without requiring changes to your panel provider files. When you add or remove a module, its Filament integration is automatically handled.
-</Aside>
+> [!NOTE]
+> The `Panel::configureUsing()` approach is powerful because it allows modules to configure themselves without requiring changes to your panel provider files. When you add or remove a module, its Filament integration is automatically handled.
 
 ## Registering Livewire components from modules
 

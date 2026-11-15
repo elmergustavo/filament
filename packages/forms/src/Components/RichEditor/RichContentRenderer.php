@@ -211,6 +211,15 @@ class RichContentRenderer implements Htmlable
 
     protected function processCustomBlocks(Editor $editor): void
     {
+        $editor->descendants(function (object &$node): void {
+            if ($node->type !== 'renderedCustomBlock') {
+                return;
+            }
+
+            $node->type = 'customBlock';
+            unset($node->html);
+        });
+
         if (blank($this->customBlocks)) {
             return;
         }
@@ -361,9 +370,9 @@ class RichContentRenderer implements Htmlable
             return;
         }
 
-        $mentionsByChar = [];
+        $mentionsByTriggerCharacter = [];
 
-        $editor->descendants(function (object &$node) use (&$mentionsByChar): void {
+        $editor->descendants(function (object &$node) use (&$mentionsByTriggerCharacter): void {
             if ($node->type !== 'mention') {
                 return;
             }
@@ -374,39 +383,39 @@ class RichContentRenderer implements Htmlable
                 return;
             }
 
-            $char = $node->attrs->char ?? '@';
-            $mentionsByChar[$char][] = (string) $id;
+            $triggerCharacter = $node->attrs->char ?? '@';
+            $mentionsByTriggerCharacter[$triggerCharacter][] = (string) $id;
         });
 
-        $labelsByChar = [];
+        $labelsByTriggerCharacter = [];
 
-        foreach ($mentionsByChar as $char => $ids) {
-            $provider = $this->getMentionProvider($char);
+        foreach ($mentionsByTriggerCharacter as $triggerCharacter => $ids) {
+            $provider = $this->getMentionProvider($triggerCharacter);
 
             if ($provider) {
-                $labelsByChar[$char] = $provider->getLabels(array_unique($ids));
+                $labelsByTriggerCharacter[$triggerCharacter] = $provider->getLabels(array_unique($ids));
             }
         }
 
-        $editor->descendants(function (object &$node) use ($labelsByChar): void {
+        $editor->descendants(function (object &$node) use ($labelsByTriggerCharacter): void {
             if ($node->type !== 'mention') {
                 return;
             }
 
             $id = $node->attrs->id ?? null;
-            $char = $node->attrs->char ?? '@';
+            $triggerCharacter = $node->attrs->char ?? '@';
 
             if (blank($id)) {
                 return;
             }
 
-            $provider = $this->getMentionProvider($char);
+            $provider = $this->getMentionProvider($triggerCharacter);
 
             if (! $provider) {
                 return;
             }
 
-            $label = $labelsByChar[$char][(string) $id] ?? $node->attrs->label ?? (string) $id;
+            $label = $labelsByTriggerCharacter[$triggerCharacter][(string) $id] ?? $node->attrs->label ?? (string) $id;
             $node->attrs->label = $label;
 
             $url = $provider->getUrl((string) $id, $label);
@@ -562,6 +571,16 @@ class RichContentRenderer implements Htmlable
         // Security: This method returns unsanitized HTML. Only use for
         // internal processing — never render in Blade. Use `toHtml()`.
 
+        return $this->renderHtml(shouldSanitize: false);
+    }
+
+    public function toHtml(): string
+    {
+        return $this->renderHtml(shouldSanitize: true);
+    }
+
+    protected function renderHtml(bool $shouldSanitize): string
+    {
         $editor = $this->getEditor();
 
         $this->processCustomBlocks($editor);
@@ -570,16 +589,25 @@ class RichContentRenderer implements Htmlable
         $this->processMentions($editor);
         $this->processNodes($editor);
 
-        return $editor->getHTML();
-    }
+        if (! $shouldSanitize) {
+            return $editor->getHTML();
+        }
 
-    public function toHtml(): string
-    {
-        // Security: Always use `toHtml()` (not `toUnsafeHtml()`) when
-        // rendering user-provided rich content. This applies
-        // Symfony's `HtmlSanitizer` to prevent XSS.
+        $customBlockHtml = [];
 
-        return Str::sanitizeHtml($this->toUnsafeHtml());
+        $editor->descendants(function (object &$node) use (&$customBlockHtml): void {
+            if ($node->type !== 'renderedCustomBlock') {
+                return;
+            }
+
+            // Only registered block renderers may bypass sanitization. Incoming
+            // `renderedCustomBlock` nodes were reset by `processCustomBlocks()`.
+            $placeholder = '<div data-id="' . Str::random(40) . '"></div>';
+            $customBlockHtml[$placeholder] = $node->html ?? '';
+            $node->html = $placeholder;
+        });
+
+        return strtr(Str::sanitizeHtml($editor->getHTML()), $customBlockHtml);
     }
 
     public function toText(): string
@@ -698,7 +726,7 @@ class RichContentRenderer implements Htmlable
         }
 
         foreach ($this->mentionProviders as $provider) {
-            if ($provider->getChar() === $char) {
+            if ($provider->getTriggerCharacter() === $char) {
                 return $provider;
             }
         }

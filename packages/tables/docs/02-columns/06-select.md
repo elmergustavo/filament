@@ -220,19 +220,6 @@ SelectColumn::make('author_id')
 
 <UtilityInjection set="tableColumns">As well as allowing a static value, the `preloadOptions()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
 
-### Excluding the current record
-
-When working with recursive relationships, you will likely want to remove the current record from the set of results.
-
-This can be easily be done using the `ignoreRecord` argument:
-
-```php
-use Filament\Tables\Columns\SelectColumn;
-
-SelectColumn::make('parent_id')
-    ->optionsRelationship(name: 'parent', titleAttribute: 'name', ignoreRecord: true)
-```
-
 ### Customizing the relationship query
 
 You may customize the database query that retrieves options using the third parameter of the `optionsRelationship()` method:
@@ -296,9 +283,8 @@ SelectColumn::make('author_id')
     ->rememberOptions(false)
 ```
 
-<Aside variant="warning">
-    When options are remembered, any record-specific options or disabled options will not work correctly, as the same options will be used for all records in the table. If you need record-specific options or disabled options, you should disable option remembering.
-</Aside>
+> [!WARNING]
+> When options are remembered, any record-specific options or disabled options will not work correctly, as the same options will be used for all records in the table. If you need record-specific options or disabled options, you should disable option remembering.
 
 <UtilityInjection set="tableColumns">As well as allowing a static value, the `rememberOptions()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
 
@@ -320,9 +306,8 @@ SelectColumn::make('technology')
     ->allowOptionsHtml()
 ```
 
-<Aside variant="danger">
-    Be aware that you will need to ensure that the HTML is safe to render, otherwise your application will be vulnerable to XSS attacks.
-</Aside>
+> [!CAUTION]
+> Be aware that you will need to ensure that the HTML is safe to render, otherwise your application will be vulnerable to XSS attacks.
 
 Optionally, you may pass a boolean value to control if the input should allow HTML or not:
 
@@ -455,7 +440,9 @@ If you are using the `optionsRelationship()` method, the `getOptionLabelUsing()`
 Hooks may be used to execute code at various points within the select's lifecycle:
 
 ```php
-SelectColumn::make()
+use Filament\Tables\Columns\SelectColumn;
+
+SelectColumn::make('status')
     ->beforeStateUpdated(function ($record, $state) {
         // Runs before the state is saved to the database.
     })

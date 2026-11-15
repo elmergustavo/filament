@@ -23,11 +23,10 @@ The `options()` that are passed to the filter are the same as those that are pas
 
 <UtilityInjection set="tableFilters">As well as allowing a static value, the `options()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
 
-<Aside variant="danger">
-    `options()` is a UI affordance, not an authorization boundary. The list constrains what the dropdown displays, but the submitted value is not checked against it before the filter runs. A user tampering with the Livewire request can submit any value to the filter's state — `apply()` will pass it straight into `whereIn`/`where` on the query.
-
-    If you are using `options()` to hide certain values from a group of users (for example, hiding `archived` from non-admins), scope the table query itself instead — for example with [`modifyQueryUsing()`](../../resources/listing-records#customizing-the-table-eloquent-query) or a global scope on the resource — so the restricted rows are never reachable regardless of what the filter submits.
-</Aside>
+> [!CAUTION]
+> `options()` is a UI affordance, not an authorization boundary. The list constrains what the dropdown displays, but the submitted value is not checked against it before the filter runs. A user tampering with the Livewire request can submit any value to the filter's state — `apply()` will pass it straight into `whereIn`/`where` on the query.
+>
+> If you are using `options()` to hide certain values from a group of users (for example, hiding `archived` from non-admins), scope the table query itself instead — for example with [`modifyQueryUsing()`](../../resources/listing-records#customizing-the-table-eloquent-query) or a global scope on the resource — so the restricted rows are never reachable regardless of what the filter submits.
 
 ## Customizing the column used by a select filter
 
@@ -148,6 +147,10 @@ use Illuminate\Database\Eloquent\Builder;
 SelectFilter::make('author')
     ->relationship('author', 'name', fn (Builder $query) => $query->withTrashed())
 ```
+
+### Inspecting the configured relationship
+
+You can use `$filter->hasRelationship()` to check whether a relationship name is configured. To retrieve its qualified key column, use `$filter->getQualifiedRelatedKeyNameForRelationship()`. For a relationship type without a specialized key column, this returns `null`, allowing the filter to use the related model's primary key. For belongs-to, belongs-to-many, and has-one/many-through relationships, you may pass the related query using the optional `query` argument to qualify the column using that query model's table, including when filtering self-related records.
 
 ## Disable placeholder selection
 

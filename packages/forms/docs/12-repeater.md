@@ -248,7 +248,7 @@ Repeater::make('qualifications')
 
 <UtilityInjection set="formFields">As well as allowing static values, the `collapsible()` and `collapsed()` methods also accept functions to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
 
-If collapsed items contain components that are expensive to render, you can [defer the loading of their schemas](#deferring-the-loading-of-repeater-item-schemas) until they are expanded.
+If collapsed items contain components that are expensive to render, you can [lazy load their schemas](#lazy-loading-repeater-item-schemas) when they are expanded.
 
 ## Cloning items
 
@@ -361,9 +361,8 @@ class OrderProduct extends Pivot
 }
 ```
 
-<Aside variant="info">
-    Please ensure that your pivot model has a primary key column, like `id`, to allow Filament to keep track of which repeater items have been created, updated and deleted. To make sure that Filament keeps track of the primary key, the pivot model needs to have the `$incrementing` property set to `true`.
-</Aside>
+> [!NOTE]
+> Please ensure that your pivot model has a primary key column, like `id`, to allow Filament to keep track of which repeater items have been created, updated and deleted. To make sure that Filament keeps track of the primary key, the pivot model needs to have the `$incrementing` property set to `true`.
 
 Now you can use the `orderProducts` relationship with the repeater, and it will save the data to the `order_product` pivot table:
 
@@ -400,7 +399,7 @@ Repeater::make('qualifications')
     })
 ```
 
-<UtilityInjection set="formFields" extras="Data;;array<array<string, mixed>>;;$data;;The data that is being filled into the repeater.">You can inject various utilities into the function passed to `mutateRelationshipDataBeforeFillUsing()` as parameters.</UtilityInjection>
+<UtilityInjection set="formFields" extras="Data;;array<string, mixed>;;$data;;The related item's data that is being filled into the repeater.">You can inject various utilities into the function passed to `mutateRelationshipDataBeforeFillUsing()` as parameters.</UtilityInjection>
 
 ### Mutating related item data before creating
 
@@ -573,9 +572,8 @@ Repeater::make('members')
     ->itemLabel(fn (array $state): ?string => $state['name'] ?? null),
 ```
 
-<Aside variant="tip">
-    Any fields that you use from `$state` should be `live()` if you wish to see the item label update live as you use the form.
-</Aside>
+> [!TIP]
+> Any fields that you use from `$state` should be `live()` if you wish to see the item label update live as you use the form.
 
 <UtilityInjection set="formFields" extras="Item;;Filament\Schemas\Schema;;$item;;The schema object for the current repeater item.||Key;;string;;$key;;The key for the current repeater item.||Index;;int;;$index;;The zero-based index of the current repeater item.||State;;array<string, mixed>;;$state;;The raw unvalidated data for the current repeater item.">You can inject various utilities into the function passed to `itemLabel()` as parameters.</UtilityInjection>
 
@@ -791,6 +789,9 @@ Repeater::make('members')
 
 <UtilityInjection set="formFields">As well as allowing static values, the `minItems()` and `maxItems()` methods also accept a function to dynamically calculate them. You can inject various utilities into the function as parameters.</UtilityInjection>
 
+> [!NOTE]
+> `maxItems()` is a validation rule. Filament builds item schemas before evaluating the rule, and Livewire requests can render items without running form validation. To avoid long processing times if your application accidentally creates too many items, you can [limit item processing](#limiting-item-processing) separately.
+
 ### Distinct state validation
 
 In many cases, you will want to ensure some sort of uniqueness between repeater items. A couple of common examples could be:
@@ -882,28 +883,92 @@ Repeater::make('members')
 
 This method will automatically enable the `distinct()` and `live()` methods on the field.
 
-<Aside variant="warning">
-    In case you want to add another condition to [disable options](select#disabling-specific-options) with, you can chain `disableOptionWhen()` with the `merge: true` argument:
-    
-    ```php
-    use Filament\Forms\Components\Repeater;
-    use Filament\Forms\Components\Select;
-    
-    Repeater::make('members')
-        ->schema([
-            Select::make('role')
-                ->options([
-                    // ...
-                ])
-                ->disableOptionsWhenSelectedInSiblingRepeaterItems()
-                ->disableOptionWhen(fn (string $value): bool => $value === 'super_admin', merge: true),
-        ])
-    ```
-</Aside>
+> [!WARNING]
+> In case you want to add another condition to [disable options](select#disabling-specific-options) with, you can chain `disableOptionWhen()` with the `merge: true` argument:
+>
+> ```php
+> use Filament\Forms\Components\Repeater;
+> use Filament\Forms\Components\Select;
+>
+> Repeater::make('members')
+>     ->schema([
+>         Select::make('role')
+>             ->options([
+>                 // ...
+>             ])
+>             ->disableOptionsWhenSelectedInSiblingRepeaterItems()
+>             ->disableOptionWhen(fn (string $value): bool => $value === 'super_admin', merge: true),
+>     ])
+> ```
 
-## Deferring the loading of repeater item schemas
+## Limiting item processing
 
-If a repeater's item schema is expensive to render, you can pass a `Schema` object to `schema()` and use `deferLoading()`. This is particularly useful when items are [collapsed](#collapsing-items) by default. Each item schema will be loaded independently when its item is expanded and enters the viewport:
+If your application's JavaScript accidentally creates a large state array, building and rendering an item schema for every entry can cause a long wait. You can opt in to a processing limit using `maxItemsForProcessing()` to stop processing rather than build an unexpectedly large schema:
+
+```php
+use Filament\Forms\Components\Repeater;
+
+Repeater::make('members')
+    ->schema([
+        // ...
+    ])
+    ->maxItems(5)
+    ->maxItemsForProcessing(100)
+```
+
+In this example, up to 100 items can be processed, but the form will only pass validation with at most 5 items. If the raw state contains more than 100 items, Filament aborts with an HTTP 413 response before building the repeater's item schemas. It does not truncate the data. This limit is disabled by default and accepts an integer, or `null` to disable it.
+
+> [!CAUTION]
+> The processing limit also applies to existing data loaded from your database. A record above the limit cannot be opened through that form until you raise the limit or correct its data elsewhere. Choose a limit that accommodates existing records you need to edit, including records above your validation limit.
+
+### Applying processing limits globally
+
+To enable processing limits for all repeaters, builders, and repeatable entries, use `configureUsing()` in a service provider's `boot()` method. Configure each component class separately:
+
+```php
+use Filament\Forms\Components\Builder;
+use Filament\Forms\Components\Repeater;
+use Filament\Infolists\Components\RepeatableEntry;
+
+Repeater::configureUsing(static function (Repeater $repeater): void {
+    $repeater->maxItemsForProcessing(100);
+});
+
+Builder::configureUsing(static function (Builder $builder): void {
+    $builder->maxItemsForProcessing(100);
+});
+
+RepeatableEntry::configureUsing(static function (RepeatableEntry $entry): void {
+    $entry->maxItemsForProcessing(100);
+});
+```
+
+You can override the global limit on each component to increase or decrease it:
+
+```php
+use Filament\Forms\Components\Builder;
+use Filament\Forms\Components\Repeater;
+
+Repeater::make('members')
+    ->schema([
+        // ...
+    ])
+    ->maxItemsForProcessing(200);
+
+Builder::make('content')
+    ->blocks([
+        // ...
+    ])
+    ->maxItemsForProcessing(50);
+```
+
+You can also pass `maxItemsForProcessing(null)` on a component to disable its inherited processing limit.
+
+This is an opt-in performance safeguard, not a security boundary or a guarantee of request duration. The limit applies to each repeater, builder, or repeatable entry separately, not to the total number of nested items or fields in a request. A parent's processing limit does not limit the number of items in its nested components. Builder limits count all raw items, including items with unrecognized block types. Nested schemas and expensive fields can still take time to process within these limits, and the limit does not bound request decoding or other work performed by a request. See the [repeatable entry guidance](../infolists/repeatable-entry#limiting-item-processing) for its state-loading limitations.
+
+## Lazy loading repeater item schemas
+
+If a repeater's item schema is expensive to render, you can pass a `Schema` object to `schema()` and use `lazyLoaded()`. This is particularly useful when items are [collapsed](#collapsing-items) by default. Each item schema will be loaded independently when its item is expanded and enters the viewport:
 
 ```php
 use Filament\Forms\Components\Repeater;
@@ -918,12 +983,12 @@ Repeater::make('members')
                 TextInput::make('email')
                     ->email(),
             ])
-            ->deferLoading(),
+            ->lazyLoaded(),
     )
     ->collapsed()
 ```
 
-Repeater item schemas automatically receive unique keys from their item state paths. You can learn more about deferred schemas in the [schema overview](../schemas/overview#deferring-the-loading-of-a-child-schema).
+Repeater item schemas automatically receive unique keys from their item state paths. You can learn more about lazy schemas in the [schema overview](../schemas/overview#lazy-loading-a-child-schema).
 
 ## Customizing the repeater item actions
 
@@ -974,9 +1039,8 @@ Repeater::make('members')
     )
 ```
 
-<Aside variant="info">
-    The `collapseAction()`, `collapseAllAction()`, `expandAction()` and `expandAllAction()` methods do not support confirmation modals, as clicking their buttons does not make the network request that is required to show the modal.
-</Aside>
+> [!NOTE]
+> The `collapseAction()`, `collapseAllAction()`, `expandAction()` and `expandAllAction()` methods do not support confirmation modals, as clicking their buttons does not make the network request that is required to show the modal.
 
 Completing a drag that changes the item order invokes `reorderAction()`, which supports `requiresConfirmation()`. Clicking the drag handle alone does not invoke the action.
 
@@ -1014,7 +1078,7 @@ Repeater::make('members')
 
 In this example, `$arguments['item']` gives you the ID of the current repeater item. You can validate the data in that repeater item using the `getItemState()` method on the repeater component. This method returns the validated data for the item. If the item is not valid, it will cancel the action and show an error message for that item in the form.
 
-If you want to get the raw data from the current item without validating it, you can use `$component->getRawItemState($arguments['item'])` instead.
+If you want to get a snapshot of the current item's state without validating it, you can use `$component->getItemStateSnapshot($arguments['item'])` instead. The snapshot still applies state transformations.
 
 If you want to manipulate the raw data for the entire repeater, for example, to add, remove or modify items, you can use `$component->getState()` to get the data, and `$component->state($state)` to set it again:
 

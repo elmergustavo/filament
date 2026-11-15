@@ -23,7 +23,7 @@ class SpatieMediaLibraryFileUpload extends FileUpload
 
     protected string | Closure | null $conversion = null;
 
-    protected string | Closure | null $conversionsDisk = null;
+    protected string | Closure | null $conversionsDiskName = null;
 
     protected bool | Closure $hasResponsiveImages = false;
 
@@ -146,7 +146,7 @@ class SpatieMediaLibraryFileUpload extends FileUpload
                 ->addCustomHeaders([...['ContentType' => $file->getMimeType()], ...$component->getCustomHeaders()])
                 ->usingFileName($filename)
                 ->usingName($component->getMediaName($file) ?? pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME))
-                ->storingConversionsOnDisk($component->getConversionsDisk() ?? '')
+                ->storingConversionsOnDisk($component->getConversionsDiskName() ?? '')
                 ->withCustomProperties($component->getCustomProperties($file))
                 ->withManipulations($component->getManipulations())
                 ->withResponsiveImagesIf($component->hasResponsiveImages())
@@ -213,7 +213,7 @@ class SpatieMediaLibraryFileUpload extends FileUpload
 
     public function conversionsDisk(string | Closure | null $disk): static
     {
-        $this->conversionsDisk = $disk;
+        $this->conversionsDiskName = $disk;
 
         return $this;
     }
@@ -331,9 +331,17 @@ class SpatieMediaLibraryFileUpload extends FileUpload
         return $this->evaluate($this->conversion);
     }
 
+    /**
+     * @deprecated Use `getConversionsDiskName()` instead.
+     */
     public function getConversionsDisk(): ?string
     {
-        return $this->evaluate($this->conversionsDisk);
+        return $this->getConversionsDiskName();
+    }
+
+    public function getConversionsDiskName(): ?string
+    {
+        return $this->evaluate($this->conversionsDiskName);
     }
 
     /**

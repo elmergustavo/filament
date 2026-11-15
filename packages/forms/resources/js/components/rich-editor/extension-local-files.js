@@ -45,6 +45,7 @@ const LocalFilesPlugin = ({
     acceptedTypes,
     acceptedTypesValidationMessage,
     get$WireUsing,
+    getFileAttachmentUrlUsing,
     key,
     maxSize,
     maxSizeValidationMessage,
@@ -59,15 +60,6 @@ const LocalFilesPlugin = ({
         isDestroyed = true
         pendingUploads.forEach((finish) => finish())
     })
-
-    const getFileAttachmentUrl = (fileKey) =>
-        get$WireUsing().callSchemaComponentMethod(
-            key,
-            'getUploadedFileAttachmentTemporaryUrl',
-            {
-                attachment: fileKey,
-            },
-        )
 
     const startUpload = (editorView) => {
         const form = editorView.dom.closest('form')
@@ -125,7 +117,7 @@ const LocalFilesPlugin = ({
                     }
 
                     try {
-                        const url = await getFileAttachmentUrl(fileKey)
+                        const url = await getFileAttachmentUrlUsing(fileKey)
                         resolve(url ? { id: fileKey, src: url } : null)
                     } catch {
                         resolve(null)
@@ -172,7 +164,13 @@ const LocalFilesPlugin = ({
     return new Plugin({
         key: new PluginKey('localFiles'),
         props: {
-            handleDrop(editorView, event) {
+            handleDrop(editorView, event, slice, moved) {
+                // Browsers attach a dragged image as a file, so leave a move
+                // within the editor to ProseMirror instead of uploading it again.
+                if (moved) {
+                    return false
+                }
+
                 if (!event.dataTransfer?.files.length) {
                     return false
                 }
@@ -408,6 +406,7 @@ export default Extension.create({
             statePath: null,
             uploadingMessage: null,
             get$WireUsing: null,
+            getFileAttachmentUrlUsing: null,
         }
     },
 

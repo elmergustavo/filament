@@ -5,6 +5,8 @@ namespace Filament\Tables\Concerns;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Schemas\Schema;
+use Filament\Support\Components\Attributes\Exposed;
+use Filament\Support\Components\Attributes\Unexposed;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Model;
@@ -37,6 +39,7 @@ trait HasBulkActions
      *
      * @param  array<string, mixed>  $arguments
      */
+    #[Exposed]
     public function callMountedTableBulkAction(array $arguments = []): mixed
     {
         return $this->callMountedAction($arguments);
@@ -47,6 +50,7 @@ trait HasBulkActions
      *
      * @param  array<int | string> | null  $selectedRecords
      */
+    #[Exposed]
     public function mountTableBulkAction(string $name, ?array $selectedRecords = null): mixed
     {
         if ($selectedRecords !== null) {
@@ -61,6 +65,7 @@ trait HasBulkActions
      *
      * @param  array<int | string> | null  $selectedRecords
      */
+    #[Exposed]
     public function replaceMountedTableBulkAction(string $name, ?array $selectedRecords = null): void
     {
         if ($selectedRecords !== null) {
@@ -73,6 +78,7 @@ trait HasBulkActions
     /**
      * @deprecated Use the `mountedActionShouldOpenModal()` method instead.
      */
+    #[Unexposed]
     public function mountedTableBulkActionShouldOpenModal(?BulkAction $mountedBulkAction = null): bool
     {
         return $this->mountedActionShouldOpenModal($mountedBulkAction);
@@ -81,11 +87,13 @@ trait HasBulkActions
     /**
      * @deprecated Use the `mountedActionHasSchema()` method instead.
      */
+    #[Unexposed]
     public function mountedTableBulkActionHasForm(?BulkAction $mountedBulkAction = null): bool
     {
         return $this->mountedActionHasSchema($mountedBulkAction);
     }
 
+    #[Unexposed]
     public function deselectAllTableRecords(): void
     {
         $this->dispatch('deselectAllTableRecords')->self();
@@ -94,6 +102,7 @@ trait HasBulkActions
     /**
      * @return array<string>
      */
+    #[Exposed]
     public function getAllSelectableTableRecordKeys(): array
     {
         $query = $this->getFilteredTableQuery();
@@ -123,7 +132,7 @@ trait HasBulkActions
 
         $records = $this->getTable()->selectsCurrentPageOnly() ?
             $this->getTableRecords() :
-            $query->get();
+            $this->hydratePivotRelationForTableRecords($query->get());
 
         return $records->reduce(
             function (array $carry, Model | array $record, string $key): array {
@@ -148,6 +157,7 @@ trait HasBulkActions
     /**
      * @return array<string>
      */
+    #[Unexposed]
     public function getGroupedSelectableTableRecordKeys(?string $group): array
     {
         $tableGrouping = $this->getTableGrouping();
@@ -206,7 +216,7 @@ trait HasBulkActions
             $this->getTableRecords()->filter(
                 fn (Model $record) => $tableGrouping->getStringKey($record) === $group,
             ) :
-            $query->get();
+            $this->hydratePivotRelationForTableRecords($query->get());
 
         return $records->reduce(
             function (array $carry, Model $record): array {
@@ -222,15 +232,16 @@ trait HasBulkActions
         );
     }
 
+    #[Unexposed]
     public function getAllSelectableTableRecordsCount(): int
     {
         if ($this->getTable()->checksIfRecordIsSelectable()) {
             /** @var Collection $records */
             $records = $this->getTable()->selectsCurrentPageOnly() ?
                 $this->getTableRecords() :
-                ($this->getTable()->hasPivotRecordKeys() ?
+                $this->hydratePivotRelationForTableRecords(($this->getTable()->hasPivotRecordKeys() ?
                     $this->applyPivotRecordKeyToTableQuery($this->getFilteredTableQuery()) :
-                    $this->getFilteredTableQuery())->get();
+                    $this->getFilteredTableQuery())->get());
 
             return $records
                 ->filter(fn (Model | array $record): bool => $this->getTable()->isRecordSelectable($record))
@@ -248,6 +259,7 @@ trait HasBulkActions
         return $this->getFilteredTableQuery()?->count() ?? $this->cachedTableRecords->count();
     }
 
+    #[Unexposed]
     public function getSelectedTableRecords(bool $shouldFetchSelectedRecords = true, ?int $chunkSize = null): EloquentCollection | Collection | LazyCollection
     {
         if (isset($this->cachedSelectedTableRecords)) {
@@ -285,21 +297,45 @@ trait HasBulkActions
             return $this->cachedSelectedTableRecords = $resolvedSelectedRecords;
         }
 
-        $query = $this->getSelectedTableRecordsQuery($shouldFetchSelectedRecords, $chunkSize);
+        $query = $this->getSelectedTableRecordsQuery(chunkSize: $chunkSize);
 
-        if (! $shouldFetchSelectedRecords) {
-            return $this->cachedSelectedTableRecords = $query->toBase()->pluck($query->getModel()->getQualifiedKeyName());
+        if ((! $shouldFetchSelectedRecords) && (! $table->checksIfRecordIsSelectable())) {
+            $qualifiedKeyName = $query->getModel()->getQualifiedKeyName();
+            $baseQuery = $query->toBase();
+
+            // Without a limit, group limit, or offset, neither the ordering nor the selected
+            // columns can affect which keys are returned, unless another
+            // clause could still reference a selected column alias.
+            if (
+                ($baseQuery->limit === null) &&
+                ($baseQuery->groupLimit === null) &&
+                (! $baseQuery->offset) &&
+                blank($baseQuery->havings) &&
+                blank($baseQuery->groups) &&
+                blank($baseQuery->unions) &&
+                (! $baseQuery->distinct)
+            ) {
+                $baseQuery->reorder();
+
+                // SQLite allows aliases in `WHERE` and `JOIN`, and PostgreSQL
+                // set-returning projections can determine which rows exist.
+                // Preserve the projection while pruning unused output columns.
+                if (in_array($query->getModel()->getConnection()->getDriverName(), ['pgsql', 'sqlite'])) {
+                    $baseQuery->addSelect($qualifiedKeyName . ' as filament_record_key');
+                    $baseQuery = $baseQuery->newQuery()
+                        ->fromSub($baseQuery, 'filament_bulk_records')
+                        ->when($baseQuery->useWritePdo, static fn ($query) => $query->useWritePdo());
+                    $qualifiedKeyName = 'filament_record_key';
+                }
+
+                $baseQuery->select($qualifiedKeyName);
+            }
+
+            return $this->cachedSelectedTableRecords = $baseQuery->pluck($qualifiedKeyName);
         }
 
-        if ($chunkSize) {
-            $resolvedSelectedRecords = $this->lazyTableRecordsByKey($query, $chunkSize);
-
-            if ($table->getRelationship() instanceof BelongsToMany && ! $table->allowsDuplicates()) {
-                $invadedRelationship = invade($table->getRelationship());
-
-                $resolvedSelectedRecords = $resolvedSelectedRecords
-                    ->tapEach(fn (Model $record) => $invadedRelationship->hydratePivotRelation([$record]));
-            }
+        if ($chunkSize || (! $shouldFetchSelectedRecords)) {
+            $resolvedSelectedRecords = $this->lazyTableRecordsByKey($query, $chunkSize ?? 1000);
         } else {
             $resolvedSelectedRecords = $this->hydratePivotRelationForTableRecords($query->get());
         }
@@ -310,86 +346,128 @@ trait HasBulkActions
             );
         }
 
+        if (! $shouldFetchSelectedRecords) {
+            return $this->cachedSelectedTableRecords = $resolvedSelectedRecords->pluck($query->getModel()->getKeyName())->collect();
+        }
+
         return $this->cachedSelectedTableRecords = $resolvedSelectedRecords;
     }
 
+    #[Unexposed]
     public function getSelectedTableRecordsQuery(bool $shouldFetchSelectedRecords = true, ?int $chunkSize = null): Builder
     {
         $table = $this->getTable();
-        $maxSelectableRecords = $table->getMaxSelectableRecords();
+        $hasPivotRecordKeys = $table->hasPivotRecordKeys();
+        $query = $table->getQuery();
 
-        if (! $table->hasPivotRecordKeys()) {
+        if ($hasPivotRecordKeys) {
+            $qualifiedKeyName = $this->getQualifiedTablePivotKeyName();
+
             if ($this->isTrackingDeselectedTableRecords) {
-                $query = $table->getQuery()->whereKeyNot($this->deselectedTableRecords);
+                $query->whereNotIn($qualifiedKeyName, $this->deselectedTableRecords);
             } else {
-                $query = $table->getQuery()->whereKey($this->selectedTableRecords);
+                $query->whereIn($qualifiedKeyName, $this->selectedTableRecords);
             }
 
-            if ($maxSelectableRecords) {
-                $query->limit($maxSelectableRecords);
-            }
+            $table->selectPivotDataInQuery($query);
+        } elseif ($this->isTrackingDeselectedTableRecords) {
+            $query->whereKeyNot($this->deselectedTableRecords);
+        } else {
+            $query->whereKey($this->selectedTableRecords);
+        }
 
-            if (! $chunkSize) {
-                $this->applySortingToTableQuery($query);
-            }
+        $shouldApplyTableColumnRelationshipAggregates = $this->shouldApplyTableColumnRelationshipAggregates;
+        $this->shouldApplyTableColumnRelationshipAggregates = false;
 
-            if ($shouldFetchSelectedRecords) {
-                foreach ($this->getTable()->getColumns() as $column) {
-                    $column->applyEagerLoading($query);
-                    $column->applyRelationshipAggregates($query);
-                }
-            }
+        try {
+            $query = $this->applySortingToTableQuery($query);
 
             if ($table->shouldDeselectAllRecordsWhenFiltered()) {
-                $this->filterTableQuery($query);
+                $query = $this->filterTableQuery($query);
             }
-
-            if (! $shouldFetchSelectedRecords) {
-                $this->constrainQueryToSelectableTableRecords($query);
-            }
-
-            return $query;
+        } finally {
+            $this->shouldApplyTableColumnRelationshipAggregates = $shouldApplyTableColumnRelationshipAggregates;
         }
 
-        $query = $table->getQuery();
-        $qualifiedKeyName = $this->getQualifiedTablePivotKeyName();
-
-        if ($this->isTrackingDeselectedTableRecords) {
-            $query->whereNotIn($qualifiedKeyName, $this->deselectedTableRecords);
-        } else {
-            $query->whereIn($qualifiedKeyName, $this->selectedTableRecords);
-        }
-
-        if ($maxSelectableRecords) {
-            $query->limit($maxSelectableRecords);
-        }
-
-        if ($shouldFetchSelectedRecords) {
-            foreach ($this->getTable()->getColumns() as $column) {
+        // Bulk actions may use hidden aggregates too. Apply each column once,
+        // independently of the aggregates normally added by sorting/filtering.
+        foreach ($table->getColumns() as $column) {
+            if ($shouldFetchSelectedRecords) {
                 $column->applyEagerLoading($query);
-                $column->applyRelationshipAggregates($query);
             }
+
+            $column->applyRelationshipAggregates($query);
         }
 
-        $table->selectPivotDataInQuery($query);
-
-        $this->applySortingToTableQuery($query);
-
-        if ($table->shouldDeselectAllRecordsWhenFiltered()) {
-            $query = $this->filterTableQuery($query);
+        if ($hasPivotRecordKeys) {
+            $query = $this->applyPivotRecordKeyToTableQuery($query);
         }
 
-        $query = $this->applyPivotRecordKeyToTableQuery($query);
+        $query = $this->applySelectionLimitToTableQuery($query, $shouldFetchSelectedRecords);
 
         if (! $shouldFetchSelectedRecords) {
-            if ($table->checksIfRecordIsSelectable()) {
-                $query = $query->applyScopes()->withoutGlobalScopes();
-            }
-
             $this->constrainQueryToSelectableTableRecords($query);
         }
 
         return $query;
+    }
+
+    protected function applySelectionLimitToTableQuery(Builder $query, bool $shouldFetchSelectedRecords): Builder
+    {
+        $query = $query->applyScopes()->withoutGlobalScopes();
+        $maxSelectableRecords = $this->getTable()->getMaxSelectableRecords();
+
+        if ($maxSelectableRecords) {
+            $query->limit(min($query->getQuery()->limit ?? $maxSelectableRecords, $maxSelectableRecords));
+        }
+
+        if ($shouldFetchSelectedRecords || (($query->getQuery()->limit === null) && (! $query->getQuery()->offset))) {
+            return $query;
+        }
+
+        // Joined writes do not reliably support `LIMIT`. Resolve the bounded
+        // selection first, retaining its scopes and relationship constraints.
+        $qualifiedKeyName = $this->getTable()->hasPivotRecordKeys()
+            ? $this->getQualifiedTablePivotKeyName()
+            : $query->getModel()->getQualifiedKeyName();
+        $keys = (clone $query)->toBase()->pluck($this->getTable()->hasPivotRecordKeys() ? 'filament_pivot_key' : $qualifiedKeyName)->all();
+
+        $this->constrainTableQueryToResolvedRecordKeys($query, $keys);
+        $query->getQuery()->limit = null;
+        $query->getQuery()->offset = null;
+
+        // The ordering has already determined the selection. MySQL does not
+        // support `ORDER BY` in joined deletes, even without a limit.
+        return $query->reorder();
+    }
+
+    /**
+     * @param  array<int | string>  $keys
+     */
+    protected function constrainTableQueryToResolvedRecordKeys(Builder $query, array $keys): void
+    {
+        $hasPivotRecordKeys = $this->getTable()->hasPivotRecordKeys();
+        $qualifiedKeyName = $hasPivotRecordKeys
+            ? $this->getQualifiedTablePivotKeyName()
+            : $query->getModel()->getQualifiedKeyName();
+        $connection = $query->getModel()->getConnection();
+
+        if ($connection->getDriverName() === 'sqlsrv') {
+            // SQL Server allows at most 2,100 parameters per statement. Escape
+            // database-resolved keys as literals, preserving Unicode strings.
+            $query->whereIn($qualifiedKeyName, array_map(
+                static fn (int | string $key) => $connection->raw((is_string($key) ? 'N' : '') . $connection->escape($key)),
+                $keys,
+            ));
+
+            return;
+        }
+
+        if ($hasPivotRecordKeys) {
+            $query->whereIn($qualifiedKeyName, $keys);
+        } else {
+            $query->whereKey($keys);
+        }
     }
 
     protected function constrainQueryToSelectableTableRecords(Builder $query): void
@@ -408,49 +486,49 @@ trait HasBulkActions
             }
         });
 
-        if ($table->hasPivotRecordKeys()) {
-            if ($query->getQuery()->offset) {
-                $query->getQuery()->offset = null;
-            }
-
-            $query->whereIn($this->getQualifiedTablePivotKeyName(), $selectableKeys);
-        } else {
-            $query->whereKey($selectableKeys);
+        if ($table->hasPivotRecordKeys() && $query->getQuery()->offset) {
+            $query->getQuery()->offset = null;
         }
+
+        $this->constrainTableQueryToResolvedRecordKeys($query, $selectableKeys);
     }
 
     protected function lazyTableRecordsByKey(Builder $query, int $chunkSize): LazyCollection
     {
-        if (! $this->getTable()->hasPivotRecordKeys()) {
-            $query->getQuery()->orders = collect($query->getQuery()->orders)
-                ->reject(static fn (array $order): bool => ($order['column'] ?? null) === $query->getModel()->getKeyName())
-                ->values()
-                ->all();
+        $hasPivotRecordKeys = $this->getTable()->hasPivotRecordKeys();
 
-            $limit = $query->getQuery()->limit;
-            $records = $query->lazyById($chunkSize, $query->getModel()->getQualifiedKeyName(), $query->getModel()->getKeyName());
-
-            return ($limit !== null) ? $records->take($limit) : $records;
+        if ($hasPivotRecordKeys) {
+            $query = $this->applyPivotRecordKeyToTableQuery($query);
         }
 
-        $query = $this->applyPivotRecordKeyToTableQuery($query)->applyScopes()->withoutGlobalScopes();
-        $qualifiedKeyName = $this->getQualifiedTablePivotKeyName();
-        $keyName = 'filament_pivot_key';
+        $query = $query->applyScopes()->withoutGlobalScopes();
+        $qualifiedKeyName = $hasPivotRecordKeys ? $this->getQualifiedTablePivotKeyName() : $query->getModel()->getQualifiedKeyName();
+        $keyName = $hasPivotRecordKeys ? 'filament_pivot_key' : $query->getModel()->getKeyName();
+        $limit = $query->getQuery()->limit;
 
-        if (($query->getQuery()->limit !== null) || $query->getQuery()->offset) {
+        if (($limit !== null) || $query->getQuery()->offset) {
             // Resolve bounded selection before changing the traversal order.
-            $keys = (clone $query)->toBase()->pluck($keyName)->all();
-            $query->whereIn($qualifiedKeyName, $keys);
+            $keys = (clone $query)->toBase()->pluck($hasPivotRecordKeys ? $keyName : $qualifiedKeyName)->all();
+            $this->constrainTableQueryToResolvedRecordKeys($query, $keys);
             $query->getQuery()->limit = null;
             $query->getQuery()->offset = null;
         }
 
-        return $query->reorder()->lazyById($chunkSize, $qualifiedKeyName, $keyName);
+        $records = $query->reorder()->lazyById($chunkSize, $qualifiedKeyName, $keyName);
+
+        if ($this->getTable()->getRelationship() instanceof BelongsToMany) {
+            $invadedRelationship = invade($this->getTable()->getRelationship());
+
+            $records = $records->tapEach(fn (Model $record) => $invadedRelationship->hydratePivotRelation([$record]));
+        }
+
+        return ($limit !== null) ? $records->take($limit) : $records;
     }
 
     /**
      * @deprecated Override the `table()` method to configure the table.
      */
+    #[Unexposed]
     public function shouldSelectCurrentPageOnly(): bool
     {
         return false;
@@ -459,6 +537,7 @@ trait HasBulkActions
     /**
      * @deprecated Override the `table()` method to configure the table.
      */
+    #[Unexposed]
     public function shouldDeselectAllRecordsWhenTableFiltered(): bool
     {
         return true;
@@ -467,6 +546,7 @@ trait HasBulkActions
     /**
      * @deprecated Use the `getMountedAction()` method instead.
      */
+    #[Unexposed]
     public function getMountedTableBulkAction(): ?Action
     {
         return $this->getMountedAction();
@@ -475,6 +555,7 @@ trait HasBulkActions
     /**
      * @deprecated Use the `getMountedActionSchema()` method instead.
      */
+    #[Unexposed]
     public function getMountedTableBulkActionForm(?BulkAction $mountedBulkAction = null): ?Schema
     {
         return $this->getMountedActionSchema(0, $mountedBulkAction);

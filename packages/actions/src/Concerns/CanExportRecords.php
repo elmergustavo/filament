@@ -57,7 +57,7 @@ trait CanExportRecords
      */
     protected array | Closure $options = [];
 
-    protected string | Closure | null $fileDisk = null;
+    protected string | Closure | null $fileDiskName = null;
 
     protected string | Closure | null $fileName = null;
 
@@ -70,7 +70,7 @@ trait CanExportRecords
 
     protected bool | Closure $hasColumnMapping = true;
 
-    protected bool | Closure $isEnablingVisibleTableColumnsByDefault = false;
+    protected bool | Closure $shouldEnableVisibleTableColumnsByDefault = false;
 
     protected string | Closure | null $authGuard = null;
 
@@ -105,8 +105,8 @@ trait CanExportRecords
                     ],
                 })
                 ->schema(function () use ($action): array {
-                    $isEnablingVisibleTableColumnsByDefault = $action->isEnablingVisibleTableColumnsByDefault();
-                    $visibleTableColumnNames = $isEnablingVisibleTableColumnsByDefault ? $action->getVisibleTableColumnNames() : [];
+                    $shouldEnableVisibleTableColumnsByDefault = $action->shouldEnableVisibleTableColumnsByDefault();
+                    $visibleTableColumnNames = $shouldEnableVisibleTableColumnsByDefault ? $action->getVisibleTableColumnNames() : [];
 
                     $columns = $action->getExporter()::getVisibleColumns();
                     $hasMultipleToggleableColumns = count($columns) > 1;
@@ -156,7 +156,7 @@ trait CanExportRecords
                                     ->label(__('filament-actions::export.modal.form.columns.form.is_enabled.label', ['column' => $column->getName()]))
                                     ->hiddenLabel()
                                     ->default(
-                                        $isEnablingVisibleTableColumnsByDefault
+                                        $shouldEnableVisibleTableColumnsByDefault
                                             ? (in_array($column->getName(), $visibleTableColumnNames) && $column->isEnabledByDefault())
                                             : $column->isEnabledByDefault()
                                     )
@@ -240,12 +240,12 @@ trait CanExportRecords
                     ])
                     ->all();
             } else {
-                $isEnablingVisibleTableColumnsByDefault = $action->isEnablingVisibleTableColumnsByDefault();
-                $visibleTableColumnNames = $isEnablingVisibleTableColumnsByDefault ? $action->getVisibleTableColumnNames() : [];
+                $shouldEnableVisibleTableColumnsByDefault = $action->shouldEnableVisibleTableColumnsByDefault();
+                $visibleTableColumnNames = $shouldEnableVisibleTableColumnsByDefault ? $action->getVisibleTableColumnNames() : [];
 
                 $columnMap = collect($exporter::getVisibleColumns())
                     ->when(
-                        $isEnablingVisibleTableColumnsByDefault,
+                        $shouldEnableVisibleTableColumnsByDefault,
                         fn ($columns): Collection => $columns->filter(
                             fn (ExportColumn $column): bool => in_array($column->getName(), $visibleTableColumnNames) && $column->isEnabledByDefault(),
                         ),
@@ -276,7 +276,7 @@ trait CanExportRecords
                 options: $options,
             );
 
-            $export->file_disk = $action->getFileDisk() ?? $exporter->getFileDisk();
+            $export->file_disk = $action->getFileDiskName() ?? $exporter->getFileDiskName();
             // Temporary save to obtain the sequence number of the export file.
             $export->save();
 
@@ -424,6 +424,9 @@ trait CanExportRecords
         return $this;
     }
 
+    /**
+     * @deprecated Override `Exporter::getCsvDelimiter()` instead. This method has no effect on exports.
+     */
     public function csvDelimiter(string | Closure | null $delimiter): static
     {
         $this->csvDelimiter = $delimiter;
@@ -477,14 +480,22 @@ trait CanExportRecords
 
     public function fileDisk(string | Closure | null $disk): static
     {
-        $this->fileDisk = $disk;
+        $this->fileDiskName = $disk;
 
         return $this;
     }
 
+    /**
+     * @deprecated Use `getFileDiskName()` instead.
+     */
     public function getFileDisk(): ?string
     {
-        return $this->evaluate($this->fileDisk);
+        return $this->getFileDiskName();
+    }
+
+    public function getFileDiskName(): ?string
+    {
+        return $this->evaluate($this->fileDiskName);
     }
 
     public function fileName(string | Closure | null $name): static
@@ -543,14 +554,22 @@ trait CanExportRecords
 
     public function enableVisibleTableColumnsByDefault(bool | Closure $condition = true): static
     {
-        $this->isEnablingVisibleTableColumnsByDefault = $condition;
+        $this->shouldEnableVisibleTableColumnsByDefault = $condition;
 
         return $this;
     }
 
+    /**
+     * @deprecated Use `shouldEnableVisibleTableColumnsByDefault()` instead.
+     */
     public function isEnablingVisibleTableColumnsByDefault(): bool
     {
-        return (bool) $this->evaluate($this->isEnablingVisibleTableColumnsByDefault);
+        return $this->shouldEnableVisibleTableColumnsByDefault();
+    }
+
+    public function shouldEnableVisibleTableColumnsByDefault(): bool
+    {
+        return (bool) $this->evaluate($this->shouldEnableVisibleTableColumnsByDefault);
     }
 
     public function authGuard(string | Closure | null $authGuard): static

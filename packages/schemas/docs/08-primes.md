@@ -23,6 +23,7 @@ use Filament\Schemas\Components\Image;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Text;
 use Filament\Schemas\Components\UnorderedList;
+use Filament\Support\Enums\FontFamily;
 use Filament\Support\Enums\FontWeight;
 use Filament\Support\Enums\TextSize;
 
@@ -81,9 +82,8 @@ use Illuminate\Support\HtmlString;
 Text::make(new HtmlString('<strong>Warning:</strong> Modifying these permissions may give users access to sensitive information.'))
 ```
 
-<Aside variant="danger">
-    Be aware that you will need to ensure that the HTML is safe to render, otherwise your application will be vulnerable to XSS attacks.
-</Aside>
+> [!CAUTION]
+> Be aware that you will need to ensure that the HTML is safe to render, otherwise your application will be vulnerable to XSS attacks.
 
 <AutoScreenshot name="primes/text/html" alt="Text with HTML" />
 
@@ -485,6 +485,7 @@ For instance, you may make the bullets larger using `size(TextSize::Large)`:
 ```php
 use Filament\Schemas\Components\Text;
 use Filament\Schemas\Components\UnorderedList;
+use Filament\Support\Enums\TextSize;
 
 UnorderedList::make([
     Text::make('Tables')->size(TextSize::Large),

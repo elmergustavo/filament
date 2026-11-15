@@ -3,6 +3,7 @@
 namespace Filament\Auth\MultiFactor\Email;
 
 use Carbon\CarbonImmutable;
+use Carbon\Exceptions\InvalidFormatException;
 use Closure;
 use DateTimeInterface;
 use Filament\Actions\Action;
@@ -39,7 +40,7 @@ class EmailAuthentication implements HasBeforeChallengeHook, MultiFactorAuthenti
 
     protected string $codeNotification = VerifyEmailAuthentication::class;
 
-    protected ?Closure $generateCodesUsing = null;
+    protected ?Closure $generateCodeUsing = null;
 
     public static function make(): static
     {
@@ -107,7 +108,7 @@ class EmailAuthentication implements HasBeforeChallengeHook, MultiFactorAuthenti
 
                 if (! $cache->put($codeCacheKey, [
                     'hash' => $codeHash,
-                    'expiresAt' => $codeExpiresAt,
+                    'expiresAt' => $codeExpiresAt->format('Y-m-d\TH:i:s.uP'),
                 ], $codeExpiresAt)) {
                     return false;
                 }
@@ -139,17 +140,25 @@ class EmailAuthentication implements HasBeforeChallengeHook, MultiFactorAuthenti
         $user->toggleEmailAuthentication(true);
     }
 
-    public function generateCodesUsing(?Closure $callback): static
+    public function generateCodeUsing(?Closure $callback): static
     {
-        $this->generateCodesUsing = $callback;
+        $this->generateCodeUsing = $callback;
 
         return $this;
     }
 
+    /**
+     * @deprecated Use `generateCodeUsing()` instead.
+     */
+    public function generateCodesUsing(?Closure $callback): static
+    {
+        return $this->generateCodeUsing($callback);
+    }
+
     public function generateCode(): string
     {
-        if ($this->generateCodesUsing) {
-            return ($this->generateCodesUsing)();
+        if ($this->generateCodeUsing) {
+            return ($this->generateCodeUsing)();
         }
 
         return str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
@@ -194,6 +203,14 @@ class EmailAuthentication implements HasBeforeChallengeHook, MultiFactorAuthenti
             ];
             $activeCodeHash = is_array($activeCode) ? ($activeCode['hash'] ?? null) : null;
             $activeCodeExpiresAt = is_array($activeCode) ? ($activeCode['expiresAt'] ?? null) : null;
+
+            if (is_string($activeCodeExpiresAt)) {
+                try {
+                    $activeCodeExpiresAt = CarbonImmutable::parse($activeCodeExpiresAt);
+                } catch (InvalidFormatException) {
+                    return false;
+                }
+            }
 
             if (
                 (! is_string($activeCodeHash))
@@ -307,12 +324,26 @@ class EmailAuthentication implements HasBeforeChallengeHook, MultiFactorAuthenti
             $scopeCacheKey = "{$codeCacheKey}:legacy_session_expires_at";
             $previousMarkerExpiresAt = $cache->get($scopeCacheKey);
 
-            if (($previousMarkerExpiresAt instanceof DateTimeInterface) && $markerExpiresAt->lessThan($previousMarkerExpiresAt)) {
-                $markerExpiresAt = CarbonImmutable::instance($previousMarkerExpiresAt);
+            if ($previousMarkerExpiresAt !== null) {
+                if (is_string($previousMarkerExpiresAt)) {
+                    try {
+                        $previousMarkerExpiresAt = CarbonImmutable::parse($previousMarkerExpiresAt);
+                    } catch (InvalidFormatException) {
+                        return false;
+                    }
+                }
+
+                if (! ($previousMarkerExpiresAt instanceof DateTimeInterface)) {
+                    return false;
+                }
+
+                if ($markerExpiresAt->lessThan($previousMarkerExpiresAt)) {
+                    $markerExpiresAt = CarbonImmutable::instance($previousMarkerExpiresAt);
+                }
             }
 
             // Keep older, unseen session snapshots invalidated without shortening an existing barrier.
-            if (! $cache->put($scopeCacheKey, $markerExpiresAt, $markerExpiresAt)) {
+            if (! $cache->put($scopeCacheKey, $markerExpiresAt->format('Y-m-d\TH:i:s.uP'), $markerExpiresAt)) {
                 return false;
             }
 

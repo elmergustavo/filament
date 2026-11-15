@@ -129,7 +129,7 @@ By default, this command will use NPM to install dependencies. If you want to us
 
 ```bash
 php artisan make:filament-theme --pm=bun
-````
+```
 
 This command will:
 
@@ -138,6 +138,12 @@ This command will:
 3. Attempt to automatically add the theme to your `vite.config.js` input array
 4. Attempt to automatically register `->viteTheme()` in your panel provider
 5. Offer to compile the theme with Vite
+
+You can use `--skip-install` if you want to install the required dependencies yourself, and `--skip-build` if you want to compile the theme later:
+
+```bash
+php artisan make:filament-theme admin --skip-install --skip-build
+```
 
 If the command cannot automatically configure your files (due to non-standard formatting), it will display manual instructions instead. In that case, follow these steps:
 
@@ -171,17 +177,15 @@ Then compile the theme with Vite:
 npm run build
 ```
 
-<Aside variant="info">
-    Check the command output for the exact file path (e.g., `admin/theme.css`), as it may vary depending on your panel's ID.
-</Aside>
+> [!NOTE]
+> Check the command output for the exact file path (e.g., `admin/theme.css`), as it may vary depending on your panel's ID.
 
 You can now customize the theme by editing the CSS file in `resources/css/filament`.
 
 ## Using Tailwind CSS classes in your Blade views or PHP files
 
-<Aside variant="warning">
-    **A custom theme is required to use Tailwind CSS classes in your own code.** Filament's default compiled stylesheet does not include arbitrary Tailwind classes - it only contains the styles needed for Filament's own UI components.
-</Aside>
+> [!WARNING]
+> **A custom theme is required to use Tailwind CSS classes in your own code.** Filament's default compiled stylesheet does not include arbitrary Tailwind classes - it only contains the styles needed for Filament's own UI components.
 
 If you want to use Tailwind CSS utility classes (like `text-primary-600`, `bg-gray-100`, `p-4`, etc.) in your own Blade views, Livewire components, or PHP files, **you must create a custom theme first**.
 
@@ -254,9 +258,8 @@ public function panel(Panel $panel): Panel
 }
 ```
 
-<Aside variant="info">
-    This is different from `darkMode(false)`, which disables dark mode altogether. `themeSwitcher(false)` keeps dark mode active but hides the switcher.
-</Aside>
+> [!NOTE]
+> This is different from `darkMode(false)`, which disables dark mode altogether. `themeSwitcher(false)` keeps dark mode active but hides the switcher.
 
 ### Forcing dark mode
 
@@ -272,6 +275,8 @@ public function panel(Panel $panel): Panel
         ->darkMode(isForced: true);
 }
 ```
+
+You can check this configuration with `$panel->isDarkModeForced()` or `Filament\Facades\Filament::isDarkModeForced()` for the current panel. This is distinct from `hasDarkMode()`, which checks whether dark mode is available, and does not indicate the user's selected theme.
 
 ### Changing the default theme mode
 

@@ -11,9 +11,6 @@ export default function selectTableColumn({
     canSelectPlaceholder,
     clearButtonLabel,
     errorMessage,
-    getOptionLabelUsing,
-    getOptionsUsing,
-    getSearchResultsUsing,
     hasDynamicOptions,
     hasDynamicSearchResults,
     hasInitialNoOptionsMessage,
@@ -62,15 +59,37 @@ export default function selectTableColumn({
                     clearButtonLabel,
                     element: this.$refs.select,
                     errorMessage,
-                    getOptionLabelUsing,
-                    getOptionsUsing: optionRequests.wrap(getOptionsUsing),
+                    getOptionLabelUsing: () =>
+                        this.$wire.callTableColumnMethod(
+                            name,
+                            recordKey,
+                            'getOptionLabel',
+                        ),
+                    getOptionsUsing: optionRequests.wrap((request) =>
+                        request(this.$wire, 'callTableColumnMethod', [
+                            name,
+                            recordKey,
+                            'getOptionsForJs',
+                        ]),
+                    ),
                     getSearchResultsUsing: optionRequests.wrap(
-                        getSearchResultsUsing,
+                        (search, request) =>
+                            request(
+                                this.$wire,
+                                'callTableColumnMethod',
+                                [
+                                    name,
+                                    recordKey,
+                                    'getOptionsSearchResultsForJs',
+                                ],
+                                { search },
+                            ),
                     ),
                     hasDynamicOptions,
                     hasDynamicSearchResults,
                     hasInitialNoOptionsMessage,
                     initialOptionLabel,
+                    initialState: this.state,
                     isDisabled,
                     isHtmlAllowed,
                     isSearchable,
@@ -128,6 +147,23 @@ export default function selectTableColumn({
         },
 
         syncServerState() {
+            if (
+                !isNative &&
+                this.select &&
+                this.$refs.serverState?.hasAttribute('data-option-label')
+            ) {
+                const state = this.getServerState()
+                const label = this.$refs.serverState.dataset.optionLabel
+
+                if (this.select.labelRepository[state] !== label) {
+                    this.select.updateOptionLabelInList(state, label)
+
+                    if (this.select.state === state) {
+                        this.select.updateSelectedDisplay()
+                    }
+                }
+            }
+
             editableColumn.syncServerState.call(this)
 
             if (

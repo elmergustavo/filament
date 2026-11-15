@@ -38,7 +38,7 @@ class Tab extends Component implements HasEmbeddedView
 
     protected IconPosition | string | Closure | null $badgeIconPosition = null;
 
-    protected bool | Closure $isBadgeDeferred = false;
+    protected bool | Closure $isBadgeLazyLoaded = false;
 
     final public function __construct(string | Htmlable | Closure | null $label = null)
     {
@@ -132,16 +132,32 @@ class Tab extends Component implements HasEmbeddedView
         ]) ?? IconPosition::Before;
     }
 
-    public function deferBadge(bool | Closure $condition = true): static
+    public function lazyLoadedBadge(bool | Closure $condition = true): static
     {
-        $this->isBadgeDeferred = $condition;
+        $this->isBadgeLazyLoaded = $condition;
 
         return $this;
     }
 
+    /**
+     * @deprecated Use `lazyLoadedBadge()` instead.
+     */
+    public function deferBadge(bool | Closure $condition = true): static
+    {
+        return $this->lazyLoadedBadge($condition);
+    }
+
+    public function isBadgeLazyLoaded(): bool
+    {
+        return (bool) $this->evaluate($this->isBadgeLazyLoaded);
+    }
+
+    /**
+     * @deprecated Use `isBadgeLazyLoaded()` instead.
+     */
     public function isBadgeDeferred(): bool
     {
-        return (bool) $this->evaluate($this->isBadgeDeferred);
+        return $this->isBadgeLazyLoaded();
     }
 
     public function getTabId(): string
@@ -202,6 +218,7 @@ class Tab extends Component implements HasEmbeddedView
                 'x-show' => $this->getTabVisibilityJs(),
                 'x-bind:class' => "{ 'fi-active': isTabSelected(" . Js::from($key) . ') }',
                 'x-on:expand' => 'revealTab(' . Js::from($key) . ')',
+                'x-data' => 'filamentSchemaComponent(' . Js::from($this->getAlpineScopeConfiguration()) . ')',
             ], escape: false)
             ->merge($this->getExtraAttributes(), escape: false)
             ->class(['fi-sc-tabs-tab']);

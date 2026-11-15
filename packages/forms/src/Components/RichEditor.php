@@ -24,7 +24,7 @@ use Filament\Forms\Components\RichEditor\TextColor;
 use Filament\Forms\Components\RichEditor\ToolbarButtonGroup;
 use Filament\Forms\View\FormsIconAlias;
 use Filament\Schemas\Components\StateCasts\Contracts\StateCast;
-use Filament\Support\Components\Attributes\ExposedLivewireMethod;
+use Filament\Support\Components\Attributes\Exposed;
 use Filament\Support\Components\Contracts\HasEmbeddedView;
 use Filament\Support\Concerns\HasExtraAlpineAttributes;
 use Filament\Support\Facades\FilamentAsset;
@@ -630,9 +630,20 @@ class RichEditor extends Field implements Contracts\CanBeLengthConstrained, HasE
             return [];
         }
 
-        $attribute = $this->getName();
+        $statePath = $this->getStatePath();
 
-        $originalContent = $record->getOriginal($attribute, $record->getAttribute($attribute));
+        if (filled($modelStatePath = $this->getModelRootContainer()->getStatePath())) {
+            $statePath = (string) str($statePath)->after("{$modelStatePath}.");
+        }
+
+        $attribute = explode('.', $statePath)[0];
+        $originalState = [
+            $attribute => str_contains($statePath, '.')
+                ? $record->getOriginal($attribute)
+                : $record->getOriginal($attribute, $record->getAttribute($attribute)),
+        ];
+
+        $originalContent = Arr::get($originalState, $statePath);
 
         if (blank($originalContent)) {
             return [];
@@ -1160,16 +1171,16 @@ class RichEditor extends Field implements Contracts\CanBeLengthConstrained, HasE
     }
 
     /**
-     * @return array<int, array{char: string, extraAttributes: array<string, mixed>, isSearchable: bool, items: array<int, array{id: string, label: string}>, noOptionsMessage: string, noSearchResultsMessage: string, searchPrompt: string, searchingMessage: string}>
+     * @return array<int, array{triggerCharacter: string, extraAttributes: array<string, mixed>, isSearchable: bool, items: array<int, array{id: string, label: string}>, noOptionsMessage: string, noSearchResultsMessage: string, searchPrompt: string, searchingMessage: string}>
      */
     public function getMentionsForJs(): array
     {
         return array_map(
             function (MentionProvider $provider): array {
                 return [
-                    'char' => $provider->getChar(),
+                    'triggerCharacter' => $provider->getTriggerCharacter(),
                     'extraAttributes' => $provider->getExtraAttributes(),
-                    'isSearchable' => $provider->hasSearchResultsUsing(),
+                    'isSearchable' => $provider->hasSearchResultsUsingCallback(),
                     'items' => $this->transformMentionItemsForJs($provider->getItems()),
                     'noOptionsMessage' => $provider->getNoItemsMessage(),
                     'noSearchResultsMessage' => $provider->getNoSearchResultsMessage(),
@@ -1184,16 +1195,16 @@ class RichEditor extends Field implements Contracts\CanBeLengthConstrained, HasE
     /**
      * @return array<int, array{id: string, label: string}>
      */
-    #[ExposedLivewireMethod]
+    #[Exposed]
     #[Renderless]
-    public function getMentionSearchResultsForJs(?string $search = null, ?string $char = '@'): array
+    public function getMentionSearchResultsForJs(?string $search = null, ?string $triggerCharacter = '@'): array
     {
-        $char = $char ?? '@';
+        $triggerCharacter = $triggerCharacter ?? '@';
 
         $providers = $this->getMentionProviders();
 
-        $provider = collect($providers)->first(function (MentionProvider $mentionProvider) use ($char): bool {
-            return $mentionProvider->getChar() === $char;
+        $provider = collect($providers)->first(function (MentionProvider $mentionProvider) use ($triggerCharacter): bool {
+            return $mentionProvider->getTriggerCharacter() === $triggerCharacter;
         }) ?? ($providers[0] ?? null);
 
         if (! $provider) {
@@ -1221,33 +1232,29 @@ class RichEditor extends Field implements Contracts\CanBeLengthConstrained, HasE
     }
 
     /**
-     * @param  array<array{id: mixed, char: string}>  $mentions
-     * @return array<mixed, string>
+     * @param  array<array{id: mixed, triggerCharacter: string}>  $mentions
+     * @return array<string, array<string, string>>
      */
-    #[ExposedLivewireMethod]
+    #[Exposed]
     #[Renderless]
     public function getMentionLabelsForJs(array $mentions = []): array
     {
         $providers = $this->getMentionProviders();
         $labels = [];
 
-        $mentionsByChar = collect($mentions)->groupBy('char');
+        $mentionsByTriggerCharacter = collect($mentions)->groupBy('triggerCharacter');
 
-        foreach ($mentionsByChar as $char => $charMentions) {
-            $provider = collect($providers)->first(function (MentionProvider $mentionProvider) use ($char): bool {
-                return $mentionProvider->getChar() === $char;
+        foreach ($mentionsByTriggerCharacter as $triggerCharacter => $mentionsForTriggerCharacter) {
+            $provider = collect($providers)->first(function (MentionProvider $mentionProvider) use ($triggerCharacter): bool {
+                return $mentionProvider->getTriggerCharacter() === $triggerCharacter;
             }) ?? ($providers[0] ?? null);
 
             if (! $provider) {
                 continue;
             }
 
-            $ids = $charMentions->pluck('id')->all();
-            $charLabels = $provider->getLabels($ids);
-
-            foreach ($charLabels as $id => $label) {
-                $labels[$id] = $label;
-            }
+            $ids = $mentionsForTriggerCharacter->pluck('id')->all();
+            $labels[$triggerCharacter] = $provider->getLabels($ids);
         }
 
         return $labels;
@@ -1257,7 +1264,7 @@ class RichEditor extends Field implements Contracts\CanBeLengthConstrained, HasE
      * @param  array<array{config?: mixed, id?: mixed, key?: mixed}>  $customBlocks
      * @return array<array{key: int, label: string, preview: string, shouldApplyProseStylingToPreview: bool}>
      */
-    #[ExposedLivewireMethod]
+    #[Exposed]
     #[Renderless]
     public function getCustomBlockPreviewsForJs(array $customBlocks = []): array
     {
@@ -1405,7 +1412,7 @@ class RichEditor extends Field implements Contracts\CanBeLengthConstrained, HasE
      */
     protected function resolveCustomBlocks(): array
     {
-        return $this->evaluate($this->customBlocks) ?? $this->getContentAttribute()?->getCustomBlocksConfig() ?? [];
+        return $this->evaluate($this->customBlocks) ?? $this->getContentAttribute()?->getCustomBlocksConfiguration() ?? [];
     }
 
     /**
@@ -1724,7 +1731,7 @@ class RichEditor extends Field implements Contracts\CanBeLengthConstrained, HasE
             ->style(array_filter([
                 filled($minHeight) ? "--min-height: {$minHeight}" : null,
                 filled($maxHeight) ? "--max-height: {$maxHeight}" : null,
-                filled($stickyOffset) ? "--fi-fo-rich-editor-sticky-offset: {$stickyOffset}" : null,
+                filled($stickyOffset) ? "--rich-editor-sticky-offset: {$stickyOffset}" : null,
             ]))
             ->class(['fi-fo-rich-editor']);
 
@@ -1770,20 +1777,6 @@ class RichEditor extends Field implements Contracts\CanBeLengthConstrained, HasE
                             editCustomBlockButtonLabel: <?= Js::from(__('filament-forms::components.rich_editor.custom_blocks.actions.edit.label')) ?>,
                             extensions: <?= Js::from($this->getTipTapJsExtensions()) ?>,
                             floatingToolbars: <?= Js::from($floatingToolbars) ?>,
-                            getMentionLabelsUsing: async (mentions) => {
-                                return await $wire.callSchemaComponentMethod(
-                                    <?= Js::from($key) ?>,
-                                    'getMentionLabelsForJs',
-                                    { mentions },
-                                )
-                            },
-                            getMentionSearchResultsUsing: async (query, char) => {
-                                return await $wire.callSchemaComponentMethod(
-                                    <?= Js::from($key) ?>,
-                                    'getMentionSearchResultsForJs',
-                                    { search: query, char },
-                                )
-                            },
                             hasResizableImages: <?= Js::from((! $isDisabled) && $this->hasResizableImages()) ?>,
                             hasMinimalCustomBlockControls: <?= Js::from($this->hasMinimalCustomBlockControls()) ?>,
                             hasStickyToolbar: <?= Js::from($this->hasStickyToolbar()) ?>,

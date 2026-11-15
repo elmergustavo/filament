@@ -7,8 +7,8 @@ use Filament\Actions\Action;
 use Filament\Schemas\Components\Concerns\HasLabel;
 use Filament\Schemas\Components\Wizard\Step;
 use Filament\Schemas\Contracts\HasSchemas;
-use Filament\Schemas\View\SchemaIconAlias;
-use Filament\Support\Components\Attributes\ExposedLivewireMethod;
+use Filament\Schemas\View\SchemasIconAlias;
+use Filament\Support\Components\Attributes\Exposed;
 use Filament\Support\Components\Contracts\HasEmbeddedView;
 use Filament\Support\Concerns;
 use Filament\Support\Enums\IconPosition;
@@ -92,7 +92,7 @@ class Wizard extends Component implements HasEmbeddedView
         ]);
     }
 
-    #[ExposedLivewireMethod]
+    #[Exposed]
     public function nextStep(mixed $currentStepIndex = null, mixed $currentStepKey = null): void
     {
         if ((! is_int($currentStepIndex)) || ($currentStepIndex < 0)) {
@@ -155,7 +155,7 @@ class Wizard extends Component implements HasEmbeddedView
         $livewire->dispatch('next-wizard-step', key: $this->getKey(), step: $nextStep->getKey(), currentStep: $currentStep->getKey());
     }
 
-    #[ExposedLivewireMethod]
+    #[Exposed]
     public function previousStep(mixed $currentStepIndex = null): void
     {
         if (
@@ -446,7 +446,6 @@ class Wizard extends Component implements HasEmbeddedView
             x-data="wizardSchemaComponent({
                         isSkippable: <?= Js::from($this->isSkippable()) ?>,
                         isStepPersistedInQueryString: <?= Js::from($this->isStepPersistedInQueryString()) ?>,
-                        key: <?= Js::from($key) ?>,
                         livewireId: <?= Js::from($this->getLivewire()->getId()) ?>,
                         schemaKey: <?= Js::from($this->getRootContainer()->getKey()) ?>,
                         startStep: <?= Js::from($this->getStartStep()) ?>,
@@ -503,7 +502,7 @@ class Wizard extends Component implements HasEmbeddedView
 
                                     <?= generate_icon_html(
                                         $completedIcon ?? Heroicon::OutlinedCheck,
-                                        alias: filled($completedIcon) ? null : SchemaIconAlias::COMPONENTS_WIZARD_COMPLETED_STEP,
+                                        alias: filled($completedIcon) ? null : SchemasIconAlias::COMPONENTS_WIZARD_COMPLETED_STEP,
                                         attributes: new FilamentComponentAttributeBag([
                                             'x-cloak' => 'x-cloak',
                                             'x-show' => "getStepIndex(step) > {$stepIndex}",

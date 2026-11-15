@@ -28,9 +28,8 @@ Wizard::make([
 
 <AutoScreenshot name="schemas/layout/wizard/simple" alt="Wizard" />
 
-<Aside variant="tip">
-    We have different setup instructions if you're looking to add a wizard to the creation process inside a [panel resource](../resources/creating-records#using-a-wizard) or an [action modal](../actions/modals#rendering-a-wizard-in-a-modal). Following that documentation will ensure that the ability to submit the form is only available on the last step of the wizard.
-</Aside>
+> [!TIP]
+> We have different setup instructions if you're looking to add a wizard to the creation process inside a [panel resource](../resources/creating-records#using-a-wizard) or an [action modal](../actions/modals#rendering-a-wizard-in-a-modal). Following that documentation will ensure that the ability to submit the form is only available on the last step of the wizard.
 
 ## Rendering a submit button on the last step
 
@@ -273,11 +272,11 @@ Wizard::make([
     )
 ```
 
-<UtilityInjection set="formFields" extras="Action;;Filament\Actions\Action;;$action;;The action object to customize.">The action registration methods can inject various utilities into the function as parameters.</UtilityInjection>
+<UtilityInjection set="schemaComponents" extras="Action;;Filament\Actions\Action;;$action;;The action object to customize.">The action registration methods can inject various utilities into the function as parameters.</UtilityInjection>
 
-## Deferring the loading of step content
+## Lazy loading step content
 
-If the content of a wizard step is expensive to render, you can pass a `Schema` object to its `schema()` method and use `deferLoading()`. The content of the active step will be loaded when it enters the viewport. The content of a later step will not be loaded until the user reaches it:
+If the content of a wizard step is expensive to render, you can pass a `Schema` object to its `schema()` method and use `lazyLoaded()`. The content of the active step will be loaded when it enters the viewport. The content of a later step will not be loaded until the user reaches it:
 
 ```php
 use Filament\Forms\Components\TextInput;
@@ -293,7 +292,7 @@ Wizard::make([
                 ->components([
                     TextInput::make('name'),
                 ])
-                ->deferLoading(),
+                ->lazyLoaded(),
         ),
     Step::make('Confirmation')
         ->key('confirmationStep')
@@ -302,10 +301,10 @@ Wizard::make([
                 ->components([
                     // ...
                 ])
-                ->deferLoading(),
+                ->lazyLoaded(),
         ),
 ])
     ->key('accountWizard')
 ```
 
-Every deferred schema must have a unique key. In this example, the keys on the steps are inherited by their child schemas, while the key on the `Wizard` component namespaces them from other steps in the same schema. You can learn more in the [schema overview](overview#deferring-the-loading-of-a-child-schema).
+Every lazy schema must have a unique key. In this example, the keys on the steps are inherited by their child schemas, while the key on the `Wizard` component namespaces them from other steps in the same schema. You can learn more in the [schema overview](overview#lazy-loading-a-child-schema).

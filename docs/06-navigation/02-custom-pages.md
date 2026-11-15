@@ -56,9 +56,8 @@ protected function getHeaderActions(): array
 }
 ```
 
-<Aside variant="warning">
-    If `$post` is stored in a public Livewire property, the page's `canAccess()` method does not authorize it, and Filament does not re-query it on later requests. Re-query and authorize the post before using it in an action, including any tenant or ownership restrictions your application requires. Authorize access to the edit route separately. See [Eloquent model restoration in Livewire](../advanced/security#understanding-eloquent-model-restoration-in-livewire) for more information.
-</Aside>
+> [!WARNING]
+> If `$post` is stored in a public Livewire property, the page's `canAccess()` method does not authorize it, and Filament does not re-query it on later requests. Re-query and authorize the post before using it in an action, including any tenant or ownership restrictions your application requires. Authorize access to the edit route separately. See [Eloquent model restoration in Livewire](../advanced/security#understanding-eloquent-model-restoration-in-livewire) for more information.
 
 #### Aligning header actions
 
@@ -76,7 +75,9 @@ You can also open an action when a page loads by setting the `$defaultAction` pr
 
 ```php
 use Filament\Actions\Action;
+use Livewire\Attributes\Locked;
 
+#[Locked]
 public $defaultAction = 'onboarding';
 
 public function onboardingAction(): Action
@@ -90,6 +91,9 @@ public function onboardingAction(): Action
 You can also pass an array of arguments to the default action using the `$defaultActionArguments` property:
 
 ```php
+use Livewire\Attributes\Locked;
+
+#[Locked]
 public $defaultActionArguments = ['step' => 2];
 ```
 
@@ -167,8 +171,13 @@ public function getWidgetData(): array
 Now, you can define a corresponding public `$stats` array property on the widget class, which will be automatically filled:
 
 ```php
+use Livewire\Attributes\Locked;
+
+#[Locked]
 public $stats = [];
 ```
+
+[`#[Locked]`](../advanced/security#protecting-server-managed-component-state) prevents client-side changes to this data.
 
 ### Passing properties to widgets on pages
 
@@ -191,9 +200,11 @@ This array of properties gets mapped to [public Livewire properties](https://liv
 
 ```php
 use Filament\Widgets\Widget;
+use Livewire\Attributes\Locked;
 
 class StatsOverviewWidget extends Widget
 {
+    #[Locked]
     public string $status;
 
     // ...

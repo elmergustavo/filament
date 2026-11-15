@@ -10,7 +10,7 @@ class Values extends Summarizer
     protected bool | Closure $isBulleted = true;
 
     /**
-     * @return array<string, int>
+     * @return array<int, mixed>
      */
     public function summarize(Builder $query, string $attribute): array
     {
@@ -38,7 +38,7 @@ class Values extends Summarizer
 
         <div <?= $attributes->toHtml() ?>>
             <?php if (filled($label = $this->getLabel())) { ?>
-                <span class="fi-ta-values-summary-label">
+                <span class="fi-ta-values-summary-label<?= $this->isLabelHidden() ? ' fi-sr-only' : '' ?>">
                     <?= e($label) ?>
                 </span>
             <?php } ?>

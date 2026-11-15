@@ -48,8 +48,6 @@ export default function richEditorFormComponent({
     maxFileSizeValidationMessage,
     mergeTags,
     mentions,
-    getMentionSearchResultsUsing,
-    getMentionLabelsUsing,
     noMergeTagSearchResultsMessage,
     placeholder,
     state,
@@ -108,11 +106,11 @@ export default function richEditorFormComponent({
                     ),
                 floatingToolbars,
                 getCustomBlockPreviewsUsing: (customBlocks) =>
-                    this.$wire.callSchemaComponentMethod(
-                        key,
-                        'getCustomBlockPreviewsForJs',
-                        { customBlocks },
-                    ),
+                    this.$getCustomBlockPreviewsForJs({ customBlocks }),
+                getFileAttachmentUrlUsing: (attachment) =>
+                    this.$getUploadedFileAttachmentTemporaryUrl({
+                        attachment,
+                    }),
                 hasResizableImages,
                 hasMinimalCustomBlockControls,
                 insertCustomBlockUsing: (id, dragPosition = null) =>
@@ -127,8 +125,13 @@ export default function richEditorFormComponent({
                 maxFileSizeValidationMessage,
                 mergeTags,
                 mentions,
-                getMentionSearchResultsUsing,
-                getMentionLabelsUsing,
+                getMentionSearchResultsUsing: (search, triggerCharacter) =>
+                    this.$getMentionSearchResultsForJs({
+                        search,
+                        triggerCharacter,
+                    }),
+                getMentionLabelsUsing: (mentions) =>
+                    this.$getMentionLabelsForJs({ mentions }),
                 noMergeTagSearchResultsMessage,
                 placeholder,
                 statePath,
@@ -147,7 +150,7 @@ export default function richEditorFormComponent({
 
                     if (hasStickyToolbar) {
                         this.$el.style.setProperty(
-                            '--fi-fo-rich-editor-toolbar-height',
+                            '--rich-editor-toolbar-height',
                             `${entry.borderBoxSize[0].blockSize}px`,
                         )
                     }
@@ -193,19 +196,19 @@ export default function richEditorFormComponent({
                         [
                             modalHeader,
                             nextModalHeader,
-                            '--fi-fo-rich-editor-modal-header-height',
+                            '--rich-editor-modal-header-height',
                             'border-box',
                         ],
                         [
                             modalFooter,
                             nextModalFooter,
-                            '--fi-fo-rich-editor-modal-footer-height',
+                            '--rich-editor-modal-footer-height',
                             'border-box',
                         ],
                         [
                             modalViewport,
                             nextModalViewport,
-                            '--fi-fo-rich-editor-modal-viewport-height',
+                            '--rich-editor-modal-viewport-height',
                             'content-box',
                         ],
                     ]) {
@@ -233,10 +236,10 @@ export default function richEditorFormComponent({
                     for (const entry of entries) {
                         const property =
                             entry.target === modalHeader
-                                ? '--fi-fo-rich-editor-modal-header-height'
+                                ? '--rich-editor-modal-header-height'
                                 : entry.target === modalFooter
-                                  ? '--fi-fo-rich-editor-modal-footer-height'
-                                  : '--fi-fo-rich-editor-modal-viewport-height'
+                                  ? '--rich-editor-modal-footer-height'
+                                  : '--rich-editor-modal-viewport-height'
                         const height =
                             entry.target === modalViewport
                                 ? entry.contentBoxSize[0].blockSize

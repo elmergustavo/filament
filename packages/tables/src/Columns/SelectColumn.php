@@ -9,7 +9,7 @@ use Filament\Forms\Components\Concerns\CanSelectPlaceholder;
 use Filament\Forms\Components\Concerns\HasEnum;
 use Filament\Forms\Components\Concerns\HasExtraInputAttributes;
 use Filament\Forms\Components\Concerns\HasOptions;
-use Filament\Support\Components\Attributes\ExposedLivewireMethod;
+use Filament\Support\Components\Attributes\Exposed;
 use Filament\Support\Components\Contracts\HasEmbeddedView;
 use Filament\Support\Facades\FilamentAsset;
 use Filament\Support\Services\RelationshipJoiner;
@@ -146,7 +146,7 @@ class SelectColumn extends Column implements Editable, HasEmbeddedView
     }
 
     /**
-     * @return array<array-key>
+     * @return array<mixed>
      */
     public function getRules(): array
     {
@@ -263,14 +263,14 @@ class SelectColumn extends Column implements Editable, HasEmbeddedView
 
     public function searchOptionLabels(bool | Closure | null $condition = true): static
     {
-        $this->shouldSearchOptionLabels = $condition;
+        $this->shouldSearchOptionLabels = $condition ?? false;
 
         return $this;
     }
 
     public function searchOptionValues(bool | Closure | null $condition = true): static
     {
-        $this->shouldSearchOptionValues = $condition;
+        $this->shouldSearchOptionValues = $condition ?? false;
 
         return $this;
     }
@@ -373,9 +373,9 @@ class SelectColumn extends Column implements Editable, HasEmbeddedView
     }
 
     /**
-     * @return array<array{'label': string, 'value': string}>
+     * @return array<array<string, mixed>>
      */
-    #[ExposedLivewireMethod]
+    #[Exposed]
     #[Renderless]
     public function getOptionsForJs(): array
     {
@@ -389,7 +389,7 @@ class SelectColumn extends Column implements Editable, HasEmbeddedView
         return $this;
     }
 
-    #[ExposedLivewireMethod]
+    #[Exposed]
     #[Renderless]
     public function getOptionLabel(bool $withDefault = true): ?string
     {
@@ -476,9 +476,9 @@ class SelectColumn extends Column implements Editable, HasEmbeddedView
     }
 
     /**
-     * @return array<array{'label': string, 'value': string}>
+     * @return array<array<string, mixed>>
      */
-    #[ExposedLivewireMethod]
+    #[Exposed]
     #[Renderless]
     public function getOptionsSearchResultsForJs(string $search): array
     {
@@ -568,7 +568,7 @@ class SelectColumn extends Column implements Editable, HasEmbeddedView
     }
 
     /**
-     * @return array<string>
+     * @return array<string> | null
      */
     public function getOptionsSearchColumns(): ?array
     {
@@ -687,7 +687,7 @@ class SelectColumn extends Column implements Editable, HasEmbeddedView
 
         if (isset($baseRelationshipQuery->limit)) {
             $this->optionsLimit($baseRelationshipQuery->limit);
-        } elseif ($this->isSearchable() && filled($this->getOptionsSearchColumns())) {
+        } elseif ($this->areOptionsSearchable() && filled($this->getOptionsSearchColumns())) {
             $relationshipQuery->limit($this->getOptionsLimit());
         }
 
@@ -932,6 +932,22 @@ class SelectColumn extends Column implements Editable, HasEmbeddedView
         return parent::applyEagerLoading($query);
     }
 
+    /**
+     * @param  array<array<string, mixed>>  $options
+     */
+    protected function getOptionLabelFromOptionsForJs(string $value, array $options): ?string
+    {
+        foreach ($options as $option) {
+            foreach (($option['options'] ?? [$option]) as $groupedOption) {
+                if (((string) $groupedOption['value'] === $value) && filled($groupedOption['label'])) {
+                    return $groupedOption['label'];
+                }
+            }
+        }
+
+        return null;
+    }
+
     public function toEmbeddedHtml(): string
     {
         $canSelectPlaceholder = $this->canSelectPlaceholder();
@@ -943,6 +959,15 @@ class SelectColumn extends Column implements Editable, HasEmbeddedView
         $recordKey = $this->getRecordKey();
         $state = $this->getState();
         $relatedRecord = $this->getRelatedRecord();
+        $optionLabel = $this->getOptionLabel();
+        $optionsForJs = $isNative ? [] : $this->getOptionsForJs();
+
+        if ((! $isNative) && filled($state)) {
+            $value = (string) (($state instanceof BackedEnum) ? $state->value : $state);
+            $optionLabel = $this->getOptionLabelFromOptionsForJs($value, $optionsForJs)
+                ?? $this->getOptionLabelFromOptionsForJs($value, $this->transformOptionsForJs([$value => $optionLabel]))
+                ?? $optionLabel;
+        }
 
         $attributes = $this->getExtraAttributeBag()
             ->merge([
@@ -950,33 +975,15 @@ class SelectColumn extends Column implements Editable, HasEmbeddedView
                 'x-load-src' => FilamentAsset::getAlpineComponentSrc('columns/select', 'filament/tables'),
                 'x-data' => 'selectTableColumn({
                     accessibilityAttributes: ' . Js::from($this->getExtraInputAttributeBag()->only(['aria-label', 'aria-labelledby', 'aria-describedby', 'aria-invalid', 'aria-busy', 'aria-required'])->getAttributes()) . ',
-                    ariaLabel: ' . Js::from(trim(strip_tags((string) $this->getLabel()))) . ',
+                    ariaLabel: ' . Js::from(trim(strip_tags(($ariaLabel = $this->getLabel()) instanceof Htmlable ? $ariaLabel->toHtml() : $ariaLabel))) . ',
                     canOptionLabelsWrap: ' . Js::from($this->canOptionLabelsWrap()) . ',
                     canSelectPlaceholder: ' . Js::from($canSelectPlaceholder) . ',
                     clearButtonLabel: ' . Js::from(__('filament-forms::components.select.actions.clear.label')) . ',
                     errorMessage: ' . Js::from(__('filament-forms::components.select.error_message')) . ',
-                    getOptionLabelUsing: async () => {
-                        return await $wire.callTableColumnMethod(' . Js::from($name) . ', ' . Js::from($recordKey) . ', \'getOptionLabel\')
-                    },
-                    getOptionsUsing: async (request) => {
-                        return await request(
-                            $wire,
-                            \'callTableColumnMethod\',
-                            [' . Js::from($name) . ', ' . Js::from($recordKey) . ', \'getOptionsForJs\'],
-                        )
-                    },
-                    getSearchResultsUsing: async (search, request) => {
-                        return await request(
-                            $wire,
-                            \'callTableColumnMethod\',
-                            [' . Js::from($name) . ', ' . Js::from($recordKey) . ', \'getOptionsSearchResultsForJs\'],
-                            { search },
-                        )
-                    },
                     hasDynamicOptions: ' . Js::from($this->hasDynamicOptions()) . ',
                     hasDynamicSearchResults: ' . Js::from($this->hasDynamicOptionsSearchResults()) . ',
                     hasInitialNoOptionsMessage: ' . Js::from($this->hasInitialNoOptionsMessage()) . ',
-                    initialOptionLabel: ' . Js::from($this->getOptionLabel()) . ',
+                    initialOptionLabel: ' . Js::from($optionLabel) . ',
                     isDisabled: ' . Js::from($isDisabled) . ',
                     isHtmlAllowed: ' . Js::from($this->isOptionsHtmlAllowed()) . ',
                     isNative: ' . Js::from($isNative) . ',
@@ -986,7 +993,7 @@ class SelectColumn extends Column implements Editable, HasEmbeddedView
                     name: ' . Js::from($name) . ',
                     noOptionsMessage: ' . Js::from($this->getNoOptionsMessage()) . ',
                     noSearchResultsMessage: ' . Js::from($this->getNoOptionsSearchResultsMessage()) . ',
-                    options: ' . Js::from($isNative ? [] : $this->getOptionsForJs()) . ',
+                    options: ' . Js::from($optionsForJs) . ',
                     optionsLimit: ' . Js::from($this->getOptionsLimit()) . ',
                     placeholder: ' . Js::from($placeholder) . ',
                     position: ' . Js::from($this->getPosition()) . ',
@@ -999,8 +1006,8 @@ class SelectColumn extends Column implements Editable, HasEmbeddedView
                     state: ' . Js::from($state) . ',
                 })',
                 'x-id' => "['table-column-error']",
-                'x-on:click.capture' => 'blockEdit($event)',
-                'x-on:keydown.capture' => 'blockEdit($event)',
+                'x-on:click.capture' => 'preventEdit($event)',
+                'x-on:keydown.capture' => 'preventEdit($event)',
             ], escape: false)
             ->class([
                 'fi-ta-select',
@@ -1010,7 +1017,7 @@ class SelectColumn extends Column implements Editable, HasEmbeddedView
         $inputAttributes = $this->getExtraInputAttributeBag()
             ->merge([
                 'aria-label' => e(trim(strip_tags(($ariaLabel = $this->getLabel()) instanceof Htmlable ? $ariaLabel->toHtml() : $ariaLabel)), doubleEncode: false),
-                'disabled' => $isDisabled,
+                'disabled' => true,
                 'wire:loading.attr' => 'disabled',
                 'wire:target' => implode(',', Table::LOADING_TARGETS),
                 'x-bind:aria-invalid' => "error ? 'true' : " . Js::from($this->getExtraInputAttributeBag()->get('aria-invalid')),
@@ -1044,7 +1051,7 @@ class SelectColumn extends Column implements Editable, HasEmbeddedView
             wire:ignore.self
             <?= $attributes->toHtml() ?>
         >
-            <input type="hidden" value="<?= e(($state instanceof BackedEnum) ? $state->value : $state) ?>" data-disabled="<?= $isDisabled ? 'true' : 'false' ?>" x-ref="serverState" />
+            <input type="hidden" value="<?= e(($state instanceof BackedEnum) ? $state->value : $state) ?>" data-option-label="<?= e($optionLabel) ?>" data-disabled="<?= $isDisabled ? 'true' : 'false' ?>" x-ref="serverState" />
 
             <div
                 x-bind:class="{

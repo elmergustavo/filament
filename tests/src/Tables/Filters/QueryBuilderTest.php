@@ -2,6 +2,7 @@
 
 use Filament\Actions\Testing\TestAction;
 use Filament\Forms\Components\DateTimePicker;
+use Filament\Forms\Components\TextInput;
 use Filament\QueryBuilder\Constraints\DateConstraint;
 use Filament\QueryBuilder\Constraints\DateConstraint\Operators\IsAfterOperator;
 use Filament\QueryBuilder\Constraints\DateConstraint\Operators\IsBeforeOperator;
@@ -19,10 +20,13 @@ use Filament\QueryBuilder\Constraints\RelationshipConstraint\Operators\HasMinOpe
 use Filament\QueryBuilder\Constraints\RelationshipConstraint\Operators\IsRelatedToOperator;
 use Filament\QueryBuilder\Constraints\SelectConstraint;
 use Filament\QueryBuilder\Constraints\SelectConstraint\Operators\IsOperator as SelectIsOperator;
+use Filament\QueryBuilder\Constraints\TextConstraint\Operators\ContainsOperator;
 use Filament\QueryBuilder\Forms\Components\RuleBuilder;
+use Filament\Schemas\Schema;
 use Filament\Support\Facades\FilamentTimezone;
 use Filament\Tables\Filters\QueryBuilder;
 use Filament\Tables\Filters\QueryBuilder\Constraints\TextConstraint;
+use Filament\Tests\Fixtures\Livewire\Livewire as TestLivewire;
 use Filament\Tests\Fixtures\Livewire\PostsQueryBuilderTable;
 use Filament\Tests\Fixtures\Livewire\PostsQueryBuilderTableWithScopedAuthor;
 use Filament\Tests\Fixtures\Livewire\UsersQueryBuilderTable;
@@ -32,7 +36,7 @@ use Filament\Tests\Fixtures\Models\Post;
 use Filament\Tests\Fixtures\Models\QueryBuilderItem;
 use Filament\Tests\Fixtures\Models\Team;
 use Filament\Tests\Fixtures\Models\User;
-use Filament\Tests\Fixtures\Pages\QueryBuilderTableTest;
+use Filament\Tests\Fixtures\Pages\QueryBuilderTableBrowserTest;
 use Filament\Tests\Tables\TestCase;
 use Illuminate\Support\Facades\Artisan;
 use Livewire\Features\SupportTesting\Testable;
@@ -4826,7 +4830,7 @@ describe('absolute and relative date filtering', function () use ($applyQueryBui
 
         $this->actingAs(User::factory()->create());
 
-        visit('/query-builder-table-test')
+        visit('/query-builder-table-browser-test')
             ->click('button[title="Filter"]')
             ->click('text=Add rule')
             ->click('.fi-dropdown-list-item >> text=Title')
@@ -4872,7 +4876,7 @@ describe('properties', function () use ($applyQueryBuilderFilter): void {
         $contentMatch = Post::factory()->create(['title' => 'Other news', 'content' => 'Autumn highlights']);
         $nonMatch = Post::factory()->create(['title' => 'Other news', 'content' => 'Ordinary update']);
 
-        livewire(QueryBuilderTableTest::class, ['grouped' => true])
+        livewire(QueryBuilderTableBrowserTest::class, ['grouped' => true])
             ->tap($applyQueryBuilderFilter([
                 ['type' => 'or', 'data' => ['groups' => [
                     ['rules' => [['type' => 'title', 'data' => ['operator' => 'contains', 'settings' => ['text' => 'Autumn']]]]],
@@ -4948,6 +4952,36 @@ describe('properties', function () use ($applyQueryBuilderFilter): void {
     });
 });
 
+it('uses `getFormSchema()` overrides when building operator settings', function (): void {
+    $operator = new class('contains') extends ContainsOperator
+    {
+        public function getFormSchema(): array
+        {
+            return [
+                ...parent::getFormSchema(),
+                TextInput::make('extra'),
+            ];
+        }
+    };
+
+    $schema = Schema::make(TestLivewire::make())->statePath('data')->components([
+        RuleBuilder::make('rules')->constraints([
+            TextConstraint::make('title')->operators([$operator]),
+        ]),
+    ]);
+    $schema->fill(['rules' => [[
+        'type' => 'title',
+        'data' => ['operator' => 'contains', 'settings' => ['text' => 'Needle', 'extra' => 'Custom setting']],
+    ]]]);
+
+    $fields = collect($schema->getFlatComponents(withHidden: true))
+        ->filter(static fn ($component): bool => $component instanceof TextInput)
+        ->mapWithKeys(static fn (TextInput $component): array => [$component->getName() => $component->getState()])
+        ->all();
+
+    expect($fields)->toBe(['text' => 'Needle', 'extra' => 'Custom setting']);
+});
+
 it('groups the OR block using its translated heading only when attributes are grouped', function (bool $hasGroups, ?string $label): void {
     $this->actingAs(User::factory()->create());
 
@@ -4957,9 +4991,9 @@ it('groups the OR block using its translated heading only when attributes are gr
     }
 
     $label ??= 'Logic';
-    $livewire = livewire(QueryBuilderTableTest::class, ['grouped' => $hasGroups]);
+    $livewire = livewire(QueryBuilderTableBrowserTest::class, ['grouped' => $hasGroups]);
     $filter = $livewire->instance()->getTable()->getFilter('query_builder');
-    $builder = $filter->getSchema()->getComponent(static fn ($component): bool => $component instanceof RuleBuilder);
+    $builder = $filter->getForm()->getComponent(static fn ($component): bool => $component instanceof RuleBuilder);
 
     $html = $builder->toHtml();
     $document = new DOMDocument;
@@ -4991,7 +5025,7 @@ it('preserves constraint picker groups inside nested OR conditions', function ()
     $detailsGroup = '[role="group"][aria-label="Details"]:visible';
     $logicGroup = '[role="group"][aria-label="Logic"]:visible';
 
-    $page = visit('/query-builder-table-test?grouped=1');
+    $page = visit('/query-builder-table-browser-test?grouped=1');
 
     $page->click('button[title="Filter"]');
     $page->page()->locator($addRule)->click();

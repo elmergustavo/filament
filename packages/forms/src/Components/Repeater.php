@@ -9,6 +9,7 @@ use Filament\Forms\View\FormsIconAlias;
 use Filament\Schemas\Components\Component;
 use Filament\Schemas\Components\Concerns\CanBeCollapsed;
 use Filament\Schemas\Components\Concerns\CanBeCompact;
+use Filament\Schemas\Components\Concerns\CanLimitItemsForProcessing;
 use Filament\Schemas\Components\Concerns\HasContainerGridLayout;
 use Filament\Schemas\Components\Contracts\HasExtraItemActions;
 use Filament\Schemas\Schema;
@@ -37,9 +38,10 @@ class Repeater extends Field implements HasEmbeddedView, HasExtraItemActions
 {
     use CanBeCollapsed;
     use CanBeCompact;
+    use CanLimitItemsForProcessing;
     use Concerns\CanBeCloned;
     use Concerns\CanGenerateUuids;
-    use Concerns\CanLimitItemsLength;
+    use Concerns\CanLimitItemsCount;
     use Concerns\HasExtraItemActions;
     use HasContainerGridLayout;
     use HasReorderAnimationDuration;
@@ -887,6 +889,8 @@ class Repeater extends Field implements HasEmbeddedView, HasExtraItemActions
      */
     public function getDefaultChildSchemas(): array
     {
+        $this->ensureItemsCanBeProcessed($this->getItemsCount());
+
         $rawState = ($this->getRawState() ?? []);
 
         $this->cachedItemsRawStateStructure = array_map(is_array(...), $rawState);
@@ -985,7 +989,7 @@ class Repeater extends Field implements HasEmbeddedView, HasExtraItemActions
     public function orderColumn(string | Closure | null $column = 'sort'): static
     {
         $this->orderColumn = $column;
-        $this->reorderable($column);
+        $this->reorderable($column ?? false);
 
         return $this;
     }
@@ -1406,8 +1410,8 @@ class Repeater extends Field implements HasEmbeddedView, HasExtraItemActions
     }
 
     /**
-     * @param  array<array<string, mixed>>  $data
-     * @return array<array<string, mixed>> | null
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed> | null
      */
     public function mutateRelationshipDataBeforeCreate(array $data): ?array
     {
@@ -1428,8 +1432,8 @@ class Repeater extends Field implements HasEmbeddedView, HasExtraItemActions
     }
 
     /**
-     * @param  array<array<string, mixed>>  $data
-     * @return array<array<string, mixed>>
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
      */
     public function mutateRelationshipDataBeforeFill(array $data): array
     {
@@ -1450,8 +1454,8 @@ class Repeater extends Field implements HasEmbeddedView, HasExtraItemActions
     }
 
     /**
-     * @param  array<array<string, mixed>>  $data
-     * @return array<array<string, mixed>> | null
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed> | null
      */
     public function mutateRelationshipDataBeforeSave(array $data, Model $record): ?array
     {
@@ -2212,9 +2216,19 @@ class Repeater extends Field implements HasEmbeddedView, HasExtraItemActions
     }
 
     /**
+     * @deprecated Use `getItemStateSnapshot()` instead.
+     *
      * @return array<string, mixed>
      */
     public function getRawItemState(string $key): array
+    {
+        return $this->getItemStateSnapshot($key);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function getItemStateSnapshot(string $key): array
     {
         return $this->getChildSchema($key)->getStateSnapshot();
     }

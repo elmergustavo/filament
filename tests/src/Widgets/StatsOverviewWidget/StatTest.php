@@ -112,8 +112,9 @@ describe('chart', function (): void {
         expect($stat->getChart())->toBe($data);
     });
 
-    it('ignores `chart()` when `null` is passed', function (): void {
+    it('can clear `chart()` with `null`', function (): void {
         $stat = Stat::make('Count', 1)
+            ->chart([3, 19, 7])
             ->chart(null);
 
         expect($stat->getChart())->toBeNull();
@@ -172,6 +173,14 @@ describe('icon', function (): void {
         expect($stat->getIcon())->toBe(Heroicon::Users);
     });
 
+    it('can set `icon()` with an `Htmlable`', function (): void {
+        $icon = new HtmlString('<svg></svg>');
+        $stat = Stat::make('Users', 100)
+            ->icon($icon);
+
+        expect($stat->getIcon())->toBe($icon);
+    });
+
     it('can clear `icon()` with `null`', function (): void {
         $stat = Stat::make('Users', 100)
             ->icon('heroicon-o-users')
@@ -208,6 +217,14 @@ describe('description icon', function (): void {
             ->descriptionIcon('heroicon-m-arrow-trending-up');
 
         expect($stat->getDescriptionIcon())->toBe('heroicon-m-arrow-trending-up');
+    });
+
+    it('can set `descriptionIcon()` with an `Htmlable`', function (): void {
+        $icon = new HtmlString('<svg></svg>');
+        $stat = Stat::make('Users', 100)
+            ->descriptionIcon($icon);
+
+        expect($stat->getDescriptionIcon())->toBe($icon);
     });
 
     it('defaults `getDescriptionIconPosition()` to `After`', function (): void {

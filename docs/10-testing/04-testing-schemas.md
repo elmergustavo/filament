@@ -54,7 +54,7 @@ it('can automatically generate a slug from the title without any spaces', functi
         ->fillForm([
             'title' => $title,
         ])
-        ->assertSchemaStateSet(function (array $state): array {
+        ->assertSchemaStateSet(function (array $state) use ($title): array {
             expect($state['slug'])
                 ->not->toContain(' ');
                 
@@ -178,9 +178,8 @@ test('title is hidden', function () {
 });
 ```
 
-<Aside variant="tip">
-    For both `assertFormFieldHidden()` and `assertFormFieldVisible()` you can pass the name of a specific form the field belongs to as the second argument like `assertFormFieldHidden('title', 'createPostForm')`.
-</Aside>
+> [!TIP]
+> For both `assertFormFieldHidden()` and `assertFormFieldVisible()` you can pass the name of a specific form the field belongs to as the second argument like `assertFormFieldHidden('title', 'createPostForm')`.
 
 ## Testing disabled form fields
 
@@ -206,9 +205,8 @@ test('title is disabled', function () {
 });
 ```
 
-<Aside variant="tip">
-    For both `assertFormFieldEnabled()` and `assertFormFieldDisabled()` you can pass the name of a specific form the field belongs to as the second argument like `assertFormFieldEnabled('title', 'createPostForm')`.
-</Aside>
+> [!TIP]
+> For both `assertFormFieldEnabled()` and `assertFormFieldDisabled()` you can pass the name of a specific form the field belongs to as the second argument like `assertFormFieldEnabled('title', 'createPostForm')`.
 
 ## Testing other schema components
 
@@ -310,9 +308,8 @@ test('comments section is hidden', function () {
 });
 ```
 
-<Aside variant="tip">
-    For both `assertSchemaComponentHidden()` and `assertSchemaComponentVisible()` you can pass the name of a specific schema the component belongs to as the second argument like `assertSchemaComponentHidden('comments-section', 'createPostForm')`.
-</Aside>
+> [!TIP]
+> For both `assertSchemaComponentHidden()` and `assertSchemaComponentVisible()` you can pass the name of a specific schema the component belongs to as the second argument like `assertSchemaComponentHidden('comments-section', 'createPostForm')`.
 
 ## Testing repeaters
 
@@ -473,6 +470,6 @@ use function Pest\Livewire\livewire;
 it('moves to next wizard step only for fooForm', function () {
     livewire(CreatePost::class)
         ->goToNextWizardStep(schema: 'fooForm')
-        ->assertHasFormErrors(['title'], schema: 'fooForm');
+        ->assertHasFormErrors(['title'], form: 'fooForm');
 });
 ```

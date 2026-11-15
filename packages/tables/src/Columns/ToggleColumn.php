@@ -59,8 +59,8 @@ class ToggleColumn extends Column implements Editable, HasEmbeddedView
                     state: ' . Js::from($state) . ',
                 })',
                 'x-id' => "['table-column-error']",
-                'x-on:click.capture' => 'blockEdit($event)',
-                'x-on:keydown.capture' => 'blockEdit($event)',
+                'x-on:click.capture' => 'preventEdit($event)',
+                'x-on:keydown.capture' => 'preventEdit($event)',
             ], escape: false)
             ->class([
                 'fi-ta-toggle',
@@ -70,7 +70,7 @@ class ToggleColumn extends Column implements Editable, HasEmbeddedView
 
         $buttonAttributes = (new FilamentComponentAttributeBag)
             ->merge([
-                'aria-disabled' => $this->isDisabled() ? 'true' : null,
+                'aria-disabled' => 'true',
                 'aria-label' => e(trim(strip_tags(($ariaLabel = $this->getLabel()) instanceof Htmlable ? $ariaLabel->toHtml() : $ariaLabel)), doubleEncode: false),
                 'disabled' => $this->isDisabled(),
                 'wire:loading.attr' => 'disabled',

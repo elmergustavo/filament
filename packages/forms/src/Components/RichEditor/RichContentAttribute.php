@@ -145,6 +145,23 @@ class RichContentAttribute implements Htmlable
         return $this->name;
     }
 
+    public function isEmpty(): bool
+    {
+        if (blank($this->model->getAttribute($this->name))) {
+            return true;
+        }
+
+        $document = $this->getRenderer()->getEditor()->getDocument();
+
+        foreach ($document['content'] ?? [] as $node) {
+            if (($node['type'] !== 'paragraph') || filled($node['content'] ?? [])) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     public function toHtml(): string
     {
         $content = $this->model->getAttribute($this->name);
@@ -273,9 +290,19 @@ class RichContentAttribute implements Htmlable
     }
 
     /**
+     * @deprecated Use `getCustomBlocksConfiguration()` instead.
+     *
      * @return array<class-string<RichContentCustomBlock> | array<class-string<RichContentCustomBlock>>>
      */
     public function getCustomBlocksConfig(): array
+    {
+        return $this->getCustomBlocksConfiguration();
+    }
+
+    /**
+     * @return array<class-string<RichContentCustomBlock> | array<class-string<RichContentCustomBlock>>>
+     */
+    public function getCustomBlocksConfiguration(): array
     {
         return $this->customBlocks ?? [];
     }

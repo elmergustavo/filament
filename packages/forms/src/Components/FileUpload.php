@@ -44,21 +44,21 @@ class FileUpload extends BaseFileUpload implements HasEmbeddedView
 
     protected string | int | float | Closure | null $itemPanelAspectRatio = null;
 
-    protected string | Closure $loadingIndicatorPosition = 'right';
+    protected string | Closure | null $loadingIndicatorPosition = null;
 
     protected string | Closure | null $panelAspectRatio = null;
 
     protected string | Closure | null $panelLayout = 'compact';
 
-    protected string | Closure $removeUploadedFileButtonPosition = 'left';
+    protected string | Closure | null $removeUploadedFileButtonPosition = null;
 
     protected bool | Closure $shouldAppendFiles = false;
 
     protected bool | Closure $shouldOrientImagesFromExif = true;
 
-    protected string | Closure $uploadButtonPosition = 'right';
+    protected string | Closure | null $uploadButtonPosition = null;
 
-    protected string | Closure $uploadProgressIndicatorPosition = 'right';
+    protected string | Closure | null $uploadProgressIndicatorPosition = null;
 
     protected bool | Closure $hasImageEditor = false;
 
@@ -66,7 +66,7 @@ class FileUpload extends BaseFileUpload implements HasEmbeddedView
 
     protected bool | Closure $canEditSvgs = true;
 
-    protected bool | Closure $isSvgEditingConfirmed = false;
+    protected bool | Closure $shouldConfirmSvgEditing = false;
 
     protected bool | Closure $shouldAutomaticallyOpenImageEditorForAspectRatio = false;
 
@@ -408,7 +408,7 @@ class FileUpload extends BaseFileUpload implements HasEmbeddedView
 
     public function getLoadingIndicatorPosition(): string
     {
-        return $this->evaluate($this->loadingIndicatorPosition);
+        return $this->evaluate($this->loadingIndicatorPosition) ?? ($this->isAvatar() ? 'center bottom' : 'right');
     }
 
     public function getPanelAspectRatio(): ?string
@@ -423,17 +423,23 @@ class FileUpload extends BaseFileUpload implements HasEmbeddedView
 
     public function getRemoveUploadedFileButtonPosition(): string
     {
-        return $this->evaluate($this->removeUploadedFileButtonPosition);
+        return $this->evaluate($this->removeUploadedFileButtonPosition) ?? ($this->isAvatar()
+            ? ($this->hasImageEditor() ? 'left bottom' : 'center bottom')
+            : 'left');
     }
 
     public function getUploadButtonPosition(): string
     {
-        return $this->evaluate($this->uploadButtonPosition);
+        return $this->evaluate($this->uploadButtonPosition) ?? ($this->isAvatar()
+            ? ($this->hasImageEditor() ? 'right bottom' : 'center bottom')
+            : 'right');
     }
 
     public function getUploadProgressIndicatorPosition(): string
     {
-        return $this->evaluate($this->uploadProgressIndicatorPosition);
+        return $this->evaluate($this->uploadProgressIndicatorPosition) ?? ($this->isAvatar()
+            ? ($this->hasImageEditor() ? 'right bottom' : 'center bottom')
+            : 'right');
     }
 
     public function isAvatar(): bool
@@ -474,7 +480,7 @@ class FileUpload extends BaseFileUpload implements HasEmbeddedView
 
     public function confirmSvgEditing(bool | Closure $condition = true): static
     {
-        $this->isSvgEditingConfirmed = $condition;
+        $this->shouldConfirmSvgEditing = $condition;
 
         return $this;
     }
@@ -541,7 +547,7 @@ class FileUpload extends BaseFileUpload implements HasEmbeddedView
     public function getImageEditorViewportHeight(): ?int
     {
         if (($targetHeight = (int) $this->getAutomaticallyResizeImagesHeight()) > 1) {
-            return (int) round($targetHeight * $this->getParentTargetSizes($targetHeight), precision: 0);
+            return (int) round($targetHeight * $this->getImageEditorViewportScaleFactor($targetHeight), precision: 0);
         }
 
         if (filled($ratio = $this->getAutomaticallyCropImagesAspectRatio())) {
@@ -558,7 +564,7 @@ class FileUpload extends BaseFileUpload implements HasEmbeddedView
     public function getImageEditorViewportWidth(): ?int
     {
         if (($targetWidth = (int) $this->getAutomaticallyResizeImagesWidth()) > 1) {
-            return (int) round($targetWidth * $this->getParentTargetSizes($targetWidth), precision: 0);
+            return (int) round($targetWidth * $this->getImageEditorViewportScaleFactor($targetWidth), precision: 0);
         }
 
         if (filled($ratio = $this->getAutomaticallyCropImagesAspectRatio())) {
@@ -572,7 +578,15 @@ class FileUpload extends BaseFileUpload implements HasEmbeddedView
         return $this->evaluate($this->imageEditorViewportWidth);
     }
 
+    /**
+     * @deprecated Use `getImageEditorViewportScaleFactor()` instead.
+     */
     protected function getParentTargetSizes(int $widthOrHeight): int | float
+    {
+        return $this->getImageEditorViewportScaleFactor($widthOrHeight);
+    }
+
+    protected function getImageEditorViewportScaleFactor(int $widthOrHeight): int | float
     {
         $targetWidth = (int) $this->getAutomaticallyResizeImagesWidth();
 
@@ -617,9 +631,17 @@ class FileUpload extends BaseFileUpload implements HasEmbeddedView
         return (bool) $this->evaluate($this->canEditSvgs);
     }
 
+    public function shouldConfirmSvgEditing(): bool
+    {
+        return (bool) $this->evaluate($this->shouldConfirmSvgEditing);
+    }
+
+    /**
+     * @deprecated Use `shouldConfirmSvgEditing()` instead.
+     */
     public function isSvgEditingConfirmed(): bool
     {
-        return (bool) $this->evaluate($this->isSvgEditingConfirmed);
+        return $this->shouldConfirmSvgEditing();
     }
 
     public function shouldAutomaticallyOpenImageEditorForAspectRatio(): bool
@@ -847,7 +869,6 @@ class FileUpload extends BaseFileUpload implements HasEmbeddedView
         $automaticallyResizeImagesWidth = $this->getAutomaticallyResizeImagesWidth();
         $isAvatar = $this->isAvatar();
         $isMultiple = $this->isMultiple();
-        $key = $this->getKey();
         $statePath = $this->getStatePath();
         $isDisabled = $this->isDisabled();
         $placeholder = $this->getPlaceholder();
@@ -865,7 +886,11 @@ class FileUpload extends BaseFileUpload implements HasEmbeddedView
             $alignment = filled($alignment) ? (Alignment::tryFrom($alignment) ?? $alignment) : null;
         }
 
-        $wireKey = $livewireKey . '.' . substr(md5(serialize([$isDisabled, $isDisabled ? $placeholder : null])), 0, 64);
+        $wireKey = $livewireKey . '.' . substr(md5(serialize([
+            $isDisabled,
+            $isDisabled ? $placeholder : null,
+            $isDisabled && ($placeholder === '') && blank($this->getState()),
+        ])), 0, 64);
 
         $outerAttributes = $this->getExtraAttributeBag()
             ->merge([
@@ -911,25 +936,9 @@ class FileUpload extends BaseFileUpload implements HasEmbeddedView
                         automaticallyResizeImagesMode: <?= Js::from($this->getAutomaticallyResizeImagesMode()) ?>,
                         automaticallyResizeImagesHeight: <?= Js::from($automaticallyResizeImagesHeight) ?>,
                         automaticallyResizeImagesWidth: <?= Js::from($automaticallyResizeImagesWidth) ?>,
-                        cancelUploadUsing: (fileKey) => {
-                            $wire.cancelUpload(`<?= e($statePath) ?>.${fileKey}`)
-                        },
                         canEditSvgs: <?= Js::from($this->canEditSvgs()) ?>,
                         confirmSvgEditingMessage: <?= Js::from(__('filament-forms::components.file_upload.editor.svg.messages.confirmation')) ?>,
-                        deleteUploadedFileUsing: async (fileKey) => {
-                            return await $wire.callSchemaComponentMethod(
-                                <?= Js::from($key) ?>,
-                                'deleteUploadedFile',
-                                { fileKey },
-                            )
-                        },
                         disabledSvgEditingMessage: <?= Js::from(__('filament-forms::components.file_upload.editor.svg.messages.disabled')) ?>,
-                        getUploadedFilesUsing: async () => {
-                            return await $wire.callSchemaComponentMethod(
-                                <?= Js::from($key) ?>,
-                                'getUploadedFiles',
-                            )
-                        },
                         hasCircleCropper: <?= Js::from($hasCircleCropper) ?>,
                         hasImageEditor: <?= Js::from($hasImageEditor) ?>,
                         imageEditorEmptyFillColor: <?= Js::from($this->getImageEditorEmptyFillColor()) ?>,
@@ -947,7 +956,7 @@ class FileUpload extends BaseFileUpload implements HasEmbeddedView
                         isPasteable: <?= Js::from($this->isPasteable()) ?>,
                         isPreviewable: <?= Js::from($this->isPreviewable()) ?>,
                         isReorderable: <?= Js::from($this->isReorderable()) ?>,
-                        isSvgEditingConfirmed: <?= Js::from($this->isSvgEditingConfirmed()) ?>,
+                        isSvgEditingConfirmed: <?= Js::from($this->shouldConfirmSvgEditing()) ?>,
                         itemPanelAspectRatio: <?= Js::from($this->getItemPanelAspectRatio()) ?>,
                         loadingIndicatorPosition: <?= Js::from($this->getLoadingIndicatorPosition()) ?>,
                         locale: <?= Js::from(app()->getLocale()) ?>,
@@ -961,43 +970,17 @@ class FileUpload extends BaseFileUpload implements HasEmbeddedView
                         panelLayout: <?= Js::from($this->getPanelLayout()) ?>,
                         placeholder: <?= Js::from($placeholder) ?>,
                         removeUploadedFileButtonPosition: <?= Js::from($this->getRemoveUploadedFileButtonPosition()) ?>,
-                        removeUploadedFileUsing: async (fileKey) => {
-                            return await $wire.callSchemaComponentMethod(
-                                <?= Js::from($key) ?>,
-                                'removeUploadedFile',
-                                { fileKey },
-                            )
-                        },
-                        reorderUploadedFilesUsing: async (fileKeys) => {
-                            return await $wire.callSchemaComponentMethod(
-                                <?= Js::from($key) ?>,
-                                'reorderUploadedFiles',
-                                { fileKeys },
-                            )
-                        },
                         shouldAppendFiles: <?= Js::from($this->shouldAppendFiles()) ?>,
                         shouldAutomaticallyUpscaleImagesWhenResizing: <?= Js::from($this->shouldAutomaticallyUpscaleImagesWhenResizing()) ?>,
                         shouldOrientImageFromExif: <?= Js::from($this->shouldOrientImagesFromExif()) ?>,
                         shouldTransformImage: <?= Js::from($automaticallyCropImagesAspectRatio || $automaticallyResizeImagesHeight || $automaticallyResizeImagesWidth) ?>,
                         state: $wire.<?= $this->applyStateBindingModifiers("\$entangle('{$statePath}')") ?>,
+                        statePath: <?= Js::from($statePath) ?>,
                         uploadButtonPosition: <?= Js::from($this->getUploadButtonPosition()) ?>,
                         uploadingMessage: <?= Js::from($this->getUploadingMessage()) ?>,
                         downloadActionLabel: <?= Js::from(__('filament-forms::components.file_upload.actions.download.label')) ?>,
                         openActionLabel: <?= Js::from(__('filament-forms::components.file_upload.actions.open.label')) ?>,
                         uploadProgressIndicatorPosition: <?= Js::from($this->getUploadProgressIndicatorPosition()) ?>,
-                        uploadUsing: (fileKey, file, success, error, progress) => {
-                            $wire.upload(
-                                `<?= e($statePath) ?>.${fileKey}`,
-                                file,
-                                () => {
-                                    success(fileKey)
-                                },
-                                error,
-                                (progressEvent) => {
-                                    progress(true, progressEvent.detail.progress, 100)
-                                },
-                            )
-                        },
                     })"
             wire:ignore
             wire:key="<?= e($wireKey) ?>"

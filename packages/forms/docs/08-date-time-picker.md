@@ -99,9 +99,8 @@ DatePicker::make('date_of_birth')
 
 <AutoScreenshot name="forms/fields/date-time-picker/javascript" alt="JavaScript-based date time picker" />
 
-<Aside variant="info">
-    The JavaScript date picker does not allow direct date entry. Use the native date picker if users need to type dates.
-</Aside>
+> [!NOTE]
+> The JavaScript date picker does not allow direct date entry. Use the native date picker if users need to type dates.
 
 ### Customizing the display format
 
@@ -159,8 +158,6 @@ DateTimePicker::make('published_at')
     ->native(false)
     ->firstDayOfWeek(7)
 ```
-
-<UtilityInjection set="formFields">As well as allowing a static value, the `firstDayOfWeek()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
 
 <AutoScreenshot name="forms/fields/date-time-picker/week-starts-on-sunday" alt="Date time picker where the week starts on Sunday" />
 

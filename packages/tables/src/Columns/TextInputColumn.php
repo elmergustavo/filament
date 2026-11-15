@@ -239,8 +239,8 @@ class TextInputColumn extends Column implements Editable, HasEmbeddedView
                     state: ' . Js::from($state) . ',
                 })',
                 'x-id' => "['table-column-error']",
-                'x-on:click.capture' => 'blockEdit($event)',
-                'x-on:keydown.capture' => 'blockEdit($event)',
+                'x-on:click.capture' => 'preventEdit($event)',
+                'x-on:keydown.capture' => 'preventEdit($event)',
             ], escape: false)
             ->class([
                 'fi-ta-text-input',
@@ -250,7 +250,7 @@ class TextInputColumn extends Column implements Editable, HasEmbeddedView
         $inputAttributes = $this->getExtraInputAttributeBag()
             ->merge([
                 'aria-label' => e(trim(strip_tags(($ariaLabel = $this->getLabel()) instanceof Htmlable ? $ariaLabel->toHtml() : $ariaLabel)), doubleEncode: false),
-                'disabled' => $isDisabled,
+                'disabled' => true,
                 'wire:loading.attr' => 'disabled',
                 'wire:target' => implode(',', Table::LOADING_TARGETS),
                 'x-bind:aria-invalid' => "error ? 'true' : " . Js::from($this->getExtraInputAttributeBag()->get('aria-invalid')),
