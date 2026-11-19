@@ -87,6 +87,15 @@ it('scopes row and bulk `ActionGroup` menu attributes and keyboard interactions'
         ->assertMissing($bulkTrigger)
         ->assertNoSmoke();
 
+    $page
+        ->click('[data-testid="refresh-records"]')
+        ->assertSee('Refreshed record')
+        ->keys($firstTrigger, 'Enter')
+        ->assertPresent($firstItem . ':focus')
+        ->keys($firstItem, 'Enter')
+        ->assertSeeIn('[data-testid="last-action"]', 'Refreshed record')
+        ->assertPresent($firstTrigger . ':focus');
+
     $page->inDarkMode()
         ->keys($firstTrigger, 'Enter')
         ->assertPresent($firstItem . ':focus')

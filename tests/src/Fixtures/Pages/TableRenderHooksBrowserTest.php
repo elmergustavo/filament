@@ -3,9 +3,11 @@
 namespace Filament\Tests\Fixtures\Pages;
 
 use Filament\Actions\Action;
+use Filament\Forms\Components\TextInput;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\EmbeddedTable;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Filament\Tables;
 use Filament\Tables\Contracts\HasTable;
@@ -22,11 +24,26 @@ class TableRenderHooksBrowserTest extends Page implements HasTable
     #[Url]
     public bool $isTableLazyLoaded = false;
 
+    #[Url]
+    public bool $hasCustomLoadingPlaceholder = false;
+
+    public int $tableRefreshCount = 0;
+
+    public function refreshTable(): void
+    {
+        $this->tableRefreshCount++;
+
+        $this->forceRender();
+    }
+
     public function table(Table $table): Table
     {
         return $table
             ->query(Post::query())
             ->lazyLoaded(fn (): bool => $this->isTableLazyLoaded)
+            ->loadingPlaceholder(fn () => $this->hasCustomLoadingPlaceholder
+                ? view('loading-placeholder', ['label' => 'Preparing table records'])
+                : null)
             ->loadingSkeleton()
             ->columns([
                 Tables\Columns\TextColumn::make('title'),
@@ -36,7 +53,18 @@ class TableRenderHooksBrowserTest extends Page implements HasTable
                     ->state(static fn (Post $record): bool => $record->is_published),
             ])
             ->recordActions([
-                Action::make('view'),
+                Action::make('view')
+                    ->extraAttributes(['data-testid' => 'view-record'])
+                    ->modalDescription(fn (): string => "Refresh {$this->tableRefreshCount}")
+                    ->schema([
+                        TextInput::make('note')
+                            ->extraInputAttributes(['data-testid' => 'record-note']),
+                    ])
+                    ->extraModalFooterActions([
+                        Action::make('refreshTable')
+                            ->action(fn () => $this->refreshTable())
+                            ->extraAttributes(['data-testid' => 'refresh-table']),
+                    ]),
             ]);
     }
 
@@ -56,6 +84,14 @@ class TableRenderHooksBrowserTest extends Page implements HasTable
     protected function getHeaderActions(): array
     {
         return [
+            Action::make('editNote')
+                ->schema([
+                    TextInput::make('note')
+                        ->live()
+                        ->belowContent(static fn (Get $get): ?string => $get('note'))
+                        ->extraInputAttributes(['data-testid' => 'header-note']),
+                ])
+                ->extraAttributes(['data-testid' => 'edit-note']),
             Action::make('createPost')
                 ->action(fn () => Post::factory()->create([
                     'title' => 'Created by render hook test',

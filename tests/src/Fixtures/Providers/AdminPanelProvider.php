@@ -18,6 +18,7 @@ use Filament\Tests\Fixtures\Clusters\WithoutSubNavigationCluster;
 use Filament\Tests\Fixtures\Clusters\WithoutSubNavigationCluster\Pages\ClusteredPageWithoutSubNavigation;
 use Filament\Tests\Fixtures\Pages\Actions;
 use Filament\Tests\Fixtures\Pages\AfterStateUpdatedJsBrowserTest;
+use Filament\Tests\Fixtures\Pages\AsyncComponentBrowserTest;
 use Filament\Tests\Fixtures\Pages\AuthorizableSettings;
 use Filament\Tests\Fixtures\Pages\AutofocusAfterCreateAnotherTabsModalBrowserTest;
 use Filament\Tests\Fixtures\Pages\AutofocusBasicBrowserTest;
@@ -70,6 +71,7 @@ use Filament\Tests\Fixtures\Pages\Settings;
 use Filament\Tests\Fixtures\Pages\SliderBrowserTest;
 use Filament\Tests\Fixtures\Pages\StatsOverviewWidgetBrowserTest;
 use Filament\Tests\Fixtures\Pages\TableActionGroupsBrowserTest;
+use Filament\Tests\Fixtures\Pages\TableQuerySelectionBrowserTest;
 use Filament\Tests\Fixtures\Pages\TableRenderHooksBrowserTest;
 use Filament\Tests\Fixtures\Pages\TableReorderingBrowserTest;
 use Filament\Tests\Fixtures\Pages\TabsBrowserTest;
@@ -143,6 +145,7 @@ class AdminPanelProvider extends PanelProvider
             ->pages([
                 Pages\Dashboard::class,
                 Actions::class,
+                AsyncComponentBrowserTest::class,
                 SchemaComponentScopeBrowserTest::class,
                 ScopedActionsBrowserTest::class,
                 AfterStateUpdatedJsBrowserTest::class,
@@ -196,6 +199,7 @@ class AdminPanelProvider extends PanelProvider
                 SliderBrowserTest::class,
                 StatsOverviewWidgetBrowserTest::class,
                 TableActionGroupsBrowserTest::class,
+                TableQuerySelectionBrowserTest::class,
                 TableRenderHooksBrowserTest::class,
                 TableReorderingBrowserTest::class,
                 TabsBrowserTest::class,
