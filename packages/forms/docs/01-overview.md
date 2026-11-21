@@ -211,6 +211,8 @@ Toggle::make('is_admin')
 
 <UtilityInjection set="formFields">As well as allowing a static value, the `saved()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
 
+The `saved()` option does not override a disabled top-level schema. Calling `getState()` on that schema still validates it, but returns an empty array.
+
 ### Disabling a field based on the current operation
 
 The "operation" of a schema is the current action being performed on it. Usually, this is either `create`, `edit` or `view`, if you are using the [panel resource](../resources).
@@ -935,6 +937,8 @@ TextInput::make('name')
 
 > [!TIP]
 > By default, calling `extraAttributes()` multiple times will overwrite the previous attributes. If you wish to merge the attributes instead, you can pass `merge: true` to the method.
+
+When merging attributes, each callback registration is evaluated separately, even if the same callback is registered more than once.
 
 ### Adding extra HTML attributes to the input element of a field
 

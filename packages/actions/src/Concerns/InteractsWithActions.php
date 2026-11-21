@@ -19,6 +19,7 @@ use Filament\Support\Exceptions\Cancel;
 use Filament\Support\Exceptions\Halt;
 use Filament\Support\Livewire\Partials\PartialsComponentHook;
 use Filament\Support\View\Concerns\InteractsWithLivewireRendering;
+use Filament\Tables\Columns\Column;
 use Filament\Tables\Contracts\HasTable;
 use Illuminate\Auth\Access\Response;
 use Illuminate\Database\Eloquent\Model;
@@ -313,6 +314,14 @@ trait InteractsWithActions /** @phpstan-ignore trait.unused */
                 return null;
             }
 
+            if (
+                ($this instanceof HasTable) &&
+                $action->hasCanAccessSelectedRecords() &&
+                method_exists($this, 'flushCachedTableRecords')
+            ) {
+                $this->flushCachedTableRecords();
+            }
+
             if ($action->isDisabled()) {
                 $this->unmountAction(cancelParentActions: false);
 
@@ -434,6 +443,14 @@ trait InteractsWithActions /** @phpstan-ignore trait.unused */
 
         if (! $action) {
             return null;
+        }
+
+        if (
+            ($this instanceof HasTable) &&
+            $action->hasCanAccessSelectedRecords() &&
+            method_exists($this, 'flushCachedTableRecords')
+        ) {
+            $this->flushCachedTableRecords();
         }
 
         $originalActionArguments = $action->getArguments();
@@ -877,6 +894,13 @@ trait InteractsWithActions /** @phpstan-ignore trait.unused */
         $resolvedAction ??= $this->getTable()->getAction($action['name']) ?? throw new ActionNotResolvableException("Action [{$action['name']}] not found on table.");
 
         if (filled($action['context']['recordKey'] ?? null)) {
+            if (
+                (! in_array($resolvedAction, $this->getTable()->getFlatRecordActions(), strict: true)) &&
+                (! Arr::first($this->getTable()->getColumns(), static fn (Column $column): bool => $column->getAction() === $resolvedAction))
+            ) {
+                throw new ActionNotResolvableException("Action [{$action['name']}] is not registered as a table record action.");
+            }
+
             $record = $this->getTableRecord($action['context']['recordKey']);
 
             if (! $record) {

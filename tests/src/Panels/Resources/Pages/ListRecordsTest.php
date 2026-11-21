@@ -14,6 +14,7 @@ use Filament\Actions\ViewAction;
 use Filament\Facades\Filament;
 use Filament\Tables\Columns\ToggleColumn;
 use Filament\Tables\Table;
+use Filament\Tests\Fixtures\Models\Department;
 use Filament\Tests\Fixtures\Models\Post;
 use Filament\Tests\Fixtures\Models\Ticket;
 use Filament\Tests\Fixtures\Models\TicketMessage;
@@ -21,10 +22,14 @@ use Filament\Tests\Fixtures\Models\User;
 use Filament\Tests\Fixtures\Policies\TicketPolicy;
 use Filament\Tests\Fixtures\Resources\Posts\Pages\ListPosts;
 use Filament\Tests\Fixtures\Resources\Posts\Pages\ListPostsWithCustomFiltersRemoveAllAction;
+use Filament\Tests\Fixtures\Resources\Posts\Pages\ListPostsWithDisabledEditAction;
 use Filament\Tests\Fixtures\Resources\Posts\Pages\ListPostsWithTabs;
 use Filament\Tests\Fixtures\Resources\Posts\PostResource;
 use Filament\Tests\Fixtures\Resources\TicketMessages\TicketMessageResource;
 use Filament\Tests\Fixtures\Resources\Tickets\Pages\ListTickets;
+use Filament\Tests\Fixtures\Resources\Tickets\Pages\ListTicketsWithRelationshipInViewAction;
+use Filament\Tests\Fixtures\Resources\Tickets\Pages\ListTicketsWithRelationshipSavedInViewAction;
+use Filament\Tests\Fixtures\Resources\Tickets\Pages\ListTicketsWithRelationshipSaveOptInInViewAction;
 use Filament\Tests\Fixtures\Resources\Tickets\TicketResource;
 use Filament\Tests\Fixtures\Resources\Users\UserResource;
 use Filament\Tests\Panels\Resources\TestCase;
@@ -358,6 +363,53 @@ it('re-authorizes resource access on Livewire updates when the policy returns a 
     app()->bind(TicketPolicy::class . '::viewAny', fn (): bool => true);
 });
 
+it('does not save relationships when a view-only user calls the `ViewAction`', function (string $pageClass): void {
+    $ticket = Ticket::factory()->create();
+    $originalDepartment = Department::factory()->create();
+    $forgedDepartment = Department::factory()->create();
+    $ticket->departments()->attach($originalDepartment);
+
+    app()->bind(TicketPolicy::class . '::view', fn (): bool => true);
+    app()->bind(TicketPolicy::class . '::update', fn (): bool => false);
+
+    expect(TicketResource::canView($ticket))->toBeTrue()
+        ->and(TicketResource::canEdit($ticket))->toBeFalse();
+
+    livewire($pageClass)
+        ->call('mountAction', 'view', [], ['table' => true, 'recordKey' => (string) $ticket->getKey()])
+        ->set('mountedActions.0.data.departments', [$forgedDepartment->getKey()])
+        ->callMountedAction();
+
+    expect($ticket->fresh()->departments()->pluck('departments.id')->all())->toBe([$originalDepartment->getKey()]);
+})->with([
+    'default relationship saving' => ListTicketsWithRelationshipInViewAction::class,
+    'relationship saving opted in while disabled' => ListTicketsWithRelationshipSaveOptInInViewAction::class,
+    'relationship saved explicitly' => ListTicketsWithRelationshipSavedInViewAction::class,
+]);
+
+it('does not save forged field or relationship state when an `EditAction` schema is disabled', function (bool $isPublished): void {
+    $originalAuthor = User::factory()->create();
+    $submittedAuthor = User::factory()->create();
+    $post = Post::factory()->create([
+        'title' => 'Original title',
+        'is_published' => $isPublished,
+        'author_id' => $originalAuthor->getKey(),
+    ]);
+
+    livewire(ListPostsWithDisabledEditAction::class)
+        ->call('mountAction', 'edit', [], ['table' => true, 'recordKey' => (string) $post->getKey()])
+        ->set('mountedActions.0.data.title', 'Changed title')
+        ->set('mountedActions.0.data.author_id', $submittedAuthor->getKey())
+        ->callMountedAction();
+
+    expect($post->fresh())
+        ->title->toBe($isPublished ? 'Original title' : 'Changed title')
+        ->author_id->toBe(($isPublished ? $originalAuthor : $submittedAuthor)->getKey());
+})->with([
+    'disabled schema' => true,
+    'enabled schema' => false,
+]);
+
 it('renders actions based on policy', function (string $action, string $policyMethod, bool | Response $policyResult, bool $isVisible, bool $isSoftDeleted = false, bool $isTableAction = false, bool $isBulkAction = false): void {
     app()->bind(TicketPolicy::class . '::' . $policyMethod, fn (): bool | Response => $policyResult);
 
@@ -371,7 +423,7 @@ it('renders actions based on policy', function (string $action, string $policyMe
 
         livewire(ListTickets::class)
             ->filterTable('trashed', $isSoftDeleted ? 1 : null)
-            ->{$isVisible ? 'assertActionVisible' : 'assertActionHidden'}(TestAction::make($action)->table($ticket)->bulk($isBulkAction));
+            ->{$isVisible ? 'assertActionVisible' : 'assertActionHidden'}(TestAction::make($action)->table($isBulkAction ? true : $ticket)->bulk($isBulkAction));
     } else {
         livewire(ListTickets::class)
             ->{$isVisible ? 'assertActionVisible' : 'assertActionHidden'}($action);

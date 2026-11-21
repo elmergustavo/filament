@@ -11,6 +11,7 @@ use Filament\Tests\Fixtures\Livewire\Livewire;
 use Filament\Tests\Fixtures\Models\User;
 use Filament\Tests\TestCase;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 use function Filament\Tests\livewire;
 
@@ -404,6 +405,87 @@ describe('`afterStateUpdated()` hooks', function (): void {
         expect($livewire)
             ->getData()->toBe([$statePath => strrev($state)]);
     });
+
+    test('each stateless hook registration runs once per component state', function (): void {
+        $component = TextInput::make('value');
+
+        foreach (range(1, 2) as $registration) {
+            $component->afterStateUpdated(static function (Livewire $livewire): void {
+                $livewire->data['calls']++;
+            });
+        }
+
+        $schema = Schema::make($livewire = Livewire::make())
+            ->statePath('data')
+            ->components([$component])
+            ->fill(['value' => 'first', 'calls' => 0]);
+
+        $schema->callAfterStateUpdated('data.value');
+        $schema->callAfterStateUpdated('data.value');
+
+        expect($livewire->data['calls'])->toBe(2);
+
+        $component->state('second');
+        $schema->callAfterStateUpdated('data.value');
+
+        expect($livewire->data['calls'])->toBe(4);
+
+        $component->state('first');
+        $schema->callAfterStateUpdated('data.value');
+
+        expect($livewire->data['calls'])->toBe(4);
+    });
+
+    test('registrations of the same callback run independently without cloning its static state', function (): void {
+        $hook = static function (Livewire $livewire): void {
+            static $calls = 0;
+
+            $livewire->data['calls'][] = ++$calls;
+        };
+        $component = TextInput::make('value')
+            ->afterStateUpdated($hook)
+            ->afterStateUpdated($hook);
+        $schema = Schema::make($livewire = Livewire::make())
+            ->statePath('data')
+            ->components([$component])
+            ->fill(['value' => 'first', 'calls' => []]);
+
+        $schema->callAfterStateUpdated('data.value');
+        $schema->callAfterStateUpdated('data.value');
+
+        expect($livewire->data['calls'])->toBe([1, 2]);
+
+        $component->state('second');
+        $schema->callAfterStateUpdated('data.value');
+
+        expect($livewire->data['calls'])->toBe([1, 2, 3, 4]);
+    });
+
+    test('replacement hook registrations run even when the component state has not changed', function (bool $clearWithNull): void {
+        $component = TextInput::make('value');
+        $schema = Schema::make($livewire = Livewire::make())
+            ->statePath('data')
+            ->components([$component])
+            ->fill(['value' => 'unchanged', 'calls' => 0]);
+        $hook = static function (Livewire $livewire): void {
+            $livewire->data['calls']++;
+        };
+
+        $component->afterStateUpdated($hook);
+        $schema->callAfterStateUpdated('data.value');
+
+        if ($clearWithNull) {
+            $component->afterStateUpdated(null);
+        } else {
+            $component->clearAfterStateUpdatedHooks();
+        }
+
+        $component->afterStateUpdated($hook);
+        $schema->callAfterStateUpdated('data.value');
+        $schema->callAfterStateUpdated('data.value');
+
+        expect($livewire->data['calls'])->toBe(2);
+    })->with(['clearing hooks' => false, 'setting a null hook' => true]);
 
     test('custom logic can be executed after nested state is updated', function (): void {
         Schema::make($livewire = Livewire::make())
@@ -855,6 +937,83 @@ describe('dehydrating state', function (): void {
 
         expect($schema)
             ->getState()->toBe([]);
+    });
+
+    test('disabling a schema prevents fields from being dehydrated even when they opt into saving', function (): void {
+        $schema = StateTestLivewire::make()->getSchema('form')
+            ->statePath('data')
+            ->components([
+                Field::make('direct')
+                    ->default('direct value'),
+                Field::make('excluded')
+                    ->default('excluded value')
+                    ->saved(false),
+                Field::make('disabled')
+                    ->default('disabled value')
+                    ->disabled(),
+                Field::make('saved')
+                    ->default('saved value')
+                    ->disabled()
+                    ->saved(),
+                Field::make('dehydrated')
+                    ->default('dehydrated value')
+                    ->dehydrated(),
+                (new Component)
+                    ->schema([
+                        Field::make('nested')
+                            ->default('nested value'),
+                    ]),
+            ])
+            ->fill();
+
+        $expected = ['direct' => 'direct value', 'saved' => 'saved value', 'dehydrated' => 'dehydrated value', 'nested' => 'nested value'];
+
+        expect($schema->getState())->toBe($expected)
+            ->and($schema->disabled()->getState())->toBe([]);
+    });
+
+    test('a disabled child schema still permits field saving opt-ins inside an enabled top-level schema', function (): void {
+        $childComponent = (new Component)
+            ->schema(Schema::make()->disabled()->components([
+                Field::make('nested')
+                    ->default('nested value')
+                    ->saved()
+                    ->dehydrated(),
+            ]));
+
+        $schema = StateTestLivewire::make()->getSchema('form')
+            ->statePath('data')
+            ->components([
+                $childComponent,
+                Field::make('sibling')->default('sibling value'),
+            ])
+            ->fill();
+
+        $expected = ['nested' => 'nested value', 'sibling' => 'sibling value'];
+
+        expect($schema->getState())->toBe($expected);
+    });
+
+    test('a disabled schema validates before returning empty state and calling `afterValidate`', function (): void {
+        $validatedState = null;
+        $afterValidate = function (array $state) use (&$validatedState): void {
+            $validatedState = $state;
+        };
+        $schema = StateTestLivewire::make()->getSchema('form')
+            ->statePath('data')
+            ->disabled()
+            ->components([
+                TextInput::make('name')->required(),
+            ])
+            ->fill(['name' => null]);
+
+        expect(fn (): array => $schema->getState(afterValidate: $afterValidate))->toThrow(ValidationException::class)
+            ->and($validatedState)->toBeNull();
+
+        $schema->fill(['name' => 'Valid name']);
+
+        expect($schema->getState(afterValidate: $afterValidate))->toBe([])
+            ->and($validatedState)->toBe([]);
     });
 
     test('disabled components are excluded from state dehydration except if they are marked as dehydrated', function (): void {
