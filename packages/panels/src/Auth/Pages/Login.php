@@ -33,6 +33,7 @@ use Illuminate\Contracts\Auth\Guard;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Blade;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\HtmlString;
 use Illuminate\Support\Timebox;
 use Illuminate\Validation\ValidationException;
@@ -70,12 +71,23 @@ class Login extends SimplePage
     #[Exposed]
     public function authenticate(): ?LoginResponse
     {
-        try {
-            $this->rateLimit(5);
-        } catch (TooManyRequestsException $exception) {
-            $this->getRateLimitedNotification($exception)?->send();
+        $isSubmittingMultiFactorChallenge = $this->isSubmittingMultiFactorChallenge();
 
-            return null;
+        // Submitting the multi-factor challenge is not another login attempt: it can only be
+        // reached with valid credentials, and it has its own rate limit per user. Otherwise,
+        // failed password attempts before the challenge would leave none for the challenge.
+        if ($isSubmittingMultiFactorChallenge) {
+            if ($this->isMultiFactorChallengeSubmissionRateLimited()) {
+                return null;
+            }
+        } else {
+            try {
+                $this->rateLimit(5);
+            } catch (TooManyRequestsException $exception) {
+                $this->getRateLimitedNotification($exception)?->send();
+
+                return null;
+            }
         }
 
         $data = $this->form->getState();
@@ -142,6 +154,8 @@ class Login extends SimplePage
                 $this->userUndertakingMultiFactorAuthentication = encrypt([
                     'identifier' => $user->getAuthIdentifier(),
                     'userKey' => Filament::getUserScopedAuthIdentifier($user),
+                    'passwordKey' => $this->getUserUndertakingMultiFactorAuthenticationPasswordKey($user),
+                    'loginDataHash' => $this->getMultiFactorChallengeLoginDataHash(),
                 ]);
 
                 $multiFactorChallenge->beforeChallenge($user, $multiFactorAuthenticationProvider);
@@ -166,13 +180,16 @@ class Login extends SimplePage
         }
 
         $userScopedAuthIdentifier = Filament::getUserScopedAuthIdentifier($user);
+        $multiFactorChallengePasswordKey = $this->getUserUndertakingMultiFactorAuthenticationData()['passwordKey'] ?? null;
 
         // Credentials are deliberately validated again after the multi-factor challenge so that
         // password and panel access changes made during the challenge are observed before login.
         // The corresponding second `Attempting` event is intentional.
         if (! $authGuard->attemptWhen(
             $credentials,
-            fn (Authenticatable $user): bool => hash_equals($userScopedAuthIdentifier, Filament::getUserScopedAuthIdentifier($user)) && $this->isUserAllowedToAccessPanel($user),
+            fn (Authenticatable $user): bool => hash_equals($userScopedAuthIdentifier, Filament::getUserScopedAuthIdentifier($user))
+                && $this->isUserAllowedToAccessPanel($user)
+                && (($multiFactorChallengePasswordKey === null) || hash_equals($multiFactorChallengePasswordKey, $this->getUserUndertakingMultiFactorAuthenticationPasswordKey($user))),
             $remember,
         )) {
             $this->throwFailureValidationException();
@@ -190,6 +207,39 @@ class Login extends SimplePage
         }
 
         return $user->canAccessPanel(Filament::getCurrentOrDefaultPanel());
+    }
+
+    protected function isSubmittingMultiFactorChallenge(): bool
+    {
+        $loginDataHash = $this->getUserUndertakingMultiFactorAuthenticationData()['loginDataHash'] ?? null;
+
+        return is_string($loginDataHash) && hash_equals($loginDataHash, $this->getMultiFactorChallengeLoginDataHash());
+    }
+
+    protected function getMultiFactorChallengeLoginDataHash(): string
+    {
+        return hash('sha256', serialize(Arr::except($this->data ?? [], ['multiFactor'])));
+    }
+
+    protected function isMultiFactorChallengeSubmissionRateLimited(): bool
+    {
+        $multiFactorChallenge = $this->getMultiFactorChallenge();
+        $rateLimiterKey = 'filament:auth:multi_factor_challenge_submission:rate_limit:' . hash('sha256', (string) $this->userUndertakingMultiFactorAuthentication);
+
+        if (RateLimiter::tooManyAttempts($rateLimiterKey, $multiFactorChallenge->getMaxRateLimiterAttempts())) {
+            $this->getRateLimitedNotification(new TooManyRequestsException(
+                static::class,
+                'authenticate',
+                request()->ip(),
+                RateLimiter::availableIn($rateLimiterKey),
+            ))?->send();
+
+            return true;
+        }
+
+        RateLimiter::hit($rateLimiterKey);
+
+        return false;
     }
 
     protected function getMultiFactorChallenge(): MultiFactorChallenge
@@ -302,15 +352,25 @@ class Login extends SimplePage
         $authProvider = Filament::auth()->getProvider(); /** @phpstan-ignore-line */
         $user = $authProvider->retrieveById($data['identifier']);
 
-        if ((! $user) || (! hash_equals($data['userKey'], Filament::getUserScopedAuthIdentifier($user)))) {
+        if (
+            (! $user)
+            || (! hash_equals($data['userKey'], Filament::getUserScopedAuthIdentifier($user)))
+            || (! hash_equals($data['passwordKey'], $this->getUserUndertakingMultiFactorAuthenticationPasswordKey($user)))
+            || (! $this->isUserAllowedToAccessPanel($user))
+        ) {
             return null;
         }
 
         return $user;
     }
 
+    protected function getUserUndertakingMultiFactorAuthenticationPasswordKey(Authenticatable $user): string
+    {
+        return hash('sha256', (string) $user->getAuthPassword());
+    }
+
     /**
-     * @return array{identifier: mixed, userKey: string} | null
+     * @return array{identifier: mixed, userKey: string, passwordKey: string, loginDataHash?: string} | null
      */
     protected function getUserUndertakingMultiFactorAuthenticationData(): ?array
     {
@@ -324,6 +384,7 @@ class Login extends SimplePage
             (! is_array($data))
             || (! array_key_exists('identifier', $data))
             || (! is_string($data['userKey'] ?? null))
+            || (! is_string($data['passwordKey'] ?? null))
         ) {
             return null;
         }
