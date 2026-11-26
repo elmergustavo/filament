@@ -30,9 +30,11 @@ use Illuminate\Auth\Access\Response;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Routing\Route;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Route as RouteFacade;
 use LogicException;
 
@@ -99,7 +101,7 @@ abstract class Page extends BasePage
             throw (new ModelNotFoundException)->setModel(static::getResource()::getModel(), [$key]);
         }
 
-        if ($parentRecord) {
+        if ($parentRecord && (static::getResource()::getParentResourceRegistration()->getInverseRelationship($record) instanceof BelongsTo)) {
             $record->setRelation(static::getResource()::getParentResourceRegistration()->getInverseRelationshipName(), $parentRecord);
         }
 
@@ -297,7 +299,12 @@ abstract class Page extends BasePage
 
                 if ($parentResourceRegistration) {
                     $parentResource = $parentResourceRegistration->getParentResource();
-                    $parentRecord = $parentRecord->{$parentResourceRegistration->getInverseRelationshipName()};
+                    $parentRecord = $this->resolvedParentRecords[$parentResource]
+                        ?? $parentRecord->{$parentResourceRegistration->getInverseRelationshipName()};
+
+                    if (! ($parentRecord instanceof Model)) {
+                        break;
+                    }
                 }
             }
         }
@@ -441,7 +448,9 @@ abstract class Page extends BasePage
     public function getDefaultActionAuthorizationResponse(Action $action): ?Response
     {
         return match (true) {
-            $action instanceof CreateAction => static::getResource()::getCreateAuthorizationResponse(),
+            $action instanceof CreateAction => ($action->getModel() === static::getResource()::getModel())
+                ? static::getResource()::getCreateAuthorizationResponse()
+                : Gate::inspect('create', $action->getModel()),
             $action instanceof DeleteAction => static::getResource()::getDeleteAuthorizationResponse($action->getRecord()),
             $action instanceof EditAction => static::getResource()::getEditAuthorizationResponse($action->getRecord()),
             $action instanceof ForceDeleteAction => static::getResource()::getForceDeleteAuthorizationResponse($action->getRecord()),

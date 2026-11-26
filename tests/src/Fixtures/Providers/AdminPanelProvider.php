@@ -60,12 +60,15 @@ use Filament\Tests\Fixtures\Pages\OneTimeCodeInputSubmitOnCompletionBrowserTest;
 use Filament\Tests\Fixtures\Pages\PartialRenderingBrowserTest;
 use Filament\Tests\Fixtures\Pages\QueryBuilderTableBrowserTest;
 use Filament\Tests\Fixtures\Pages\RadioBrowserTest;
+use Filament\Tests\Fixtures\Pages\RelationshipKeyBrowserTest;
 use Filament\Tests\Fixtures\Pages\RepeaterBrowserTest;
 use Filament\Tests\Fixtures\Pages\RichEditorBrowserTest;
+use Filament\Tests\Fixtures\Pages\RichEditorDocumentBoundaryBrowserTest;
 use Filament\Tests\Fixtures\Pages\RichEditorMentionAttributesBrowserTest;
 use Filament\Tests\Fixtures\Pages\RichEditorMinimalControlsBrowserTest;
 use Filament\Tests\Fixtures\Pages\RichEditorStyleAttributesBrowserTest;
 use Filament\Tests\Fixtures\Pages\SchemaComponentScopeBrowserTest;
+use Filament\Tests\Fixtures\Pages\SchemaContentBrowserTest;
 use Filament\Tests\Fixtures\Pages\ScopedActionsBrowserTest;
 use Filament\Tests\Fixtures\Pages\SectionBrowserTest;
 use Filament\Tests\Fixtures\Pages\SelectBrowserTest;
@@ -149,6 +152,7 @@ class AdminPanelProvider extends PanelProvider
                 Actions::class,
                 AsyncComponentBrowserTest::class,
                 SchemaComponentScopeBrowserTest::class,
+                SchemaContentBrowserTest::class,
                 ScopedActionsBrowserTest::class,
                 AfterStateUpdatedJsBrowserTest::class,
                 AuthorizableSettings::class,
@@ -192,8 +196,10 @@ class AdminPanelProvider extends PanelProvider
                 PartialRenderingBrowserTest::class,
                 QueryBuilderTableBrowserTest::class,
                 RadioBrowserTest::class,
+                RelationshipKeyBrowserTest::class,
                 RepeaterBrowserTest::class,
                 RichEditorBrowserTest::class,
+                RichEditorDocumentBoundaryBrowserTest::class,
                 RichEditorMentionAttributesBrowserTest::class,
                 RichEditorMinimalControlsBrowserTest::class,
                 RichEditorStyleAttributesBrowserTest::class,

@@ -32,10 +32,14 @@ use Filament\Tests\Fixtures\Models\Post;
 use Filament\Tests\Fixtures\Models\Ticket;
 use Filament\Tests\Fixtures\Models\User;
 use Filament\Tests\Fixtures\Policies\DepartmentPolicy;
+use Filament\Tests\Fixtures\Policies\TicketPolicy;
+use Filament\Tests\Fixtures\Resources\Departments\CustomUpdateAuthorizationDepartmentResource;
 use Filament\Tests\Fixtures\Resources\Departments\DepartmentResource;
+use Filament\Tests\Fixtures\Resources\Departments\EditAuthorizationDepartmentResource;
 use Filament\Tests\Fixtures\Resources\Posts\PostResource;
 use Filament\Tests\Fixtures\Resources\Tickets\Pages\EditTicket;
 use Filament\Tests\Fixtures\Resources\Tickets\Pages\EditTicketWithContentTabs;
+use Filament\Tests\Fixtures\Resources\Tickets\Pages\ViewTicket;
 use Filament\Tests\Fixtures\Resources\Tickets\RelationManagers\ContentTabsDepartmentsRelationManager;
 use Filament\Tests\Fixtures\Resources\Tickets\RelationManagers\DepartmentsRelationManager;
 use Filament\Tests\Fixtures\Resources\Tickets\RelationManagers\DepartmentsRelationManagerWithTabs;
@@ -77,6 +81,24 @@ describe('rendering and authorization', function (): void {
             ->assertSuccessful();
     });
 
+    it('does not expose a denied action form through schema lookup or pagination', function (string $method, array $arguments): void {
+        app()->bind(DepartmentPolicy::class . '::create', static fn (): bool => false);
+
+        $component = livewire(DepartmentsRelationManager::class, [
+            'ownerRecord' => Ticket::factory()->create(),
+            'pageClass' => EditTicket::class,
+        ])
+            ->call('mountAction', 'create', [], ['table' => true])
+            ->assertSet('mountedActions', [])
+            ->call($method, ...$arguments);
+
+        expect($component->instance()->discoveredSchemaNames)->not->toContain('form')
+            ->and($component->instance()->getSchemaComponent('form.name'))->toBeNull();
+    })->with([
+        'partial render' => ['partiallyRenderSchemaComponent', ['form.name']],
+        'pagination hook' => ['setPage', ['form', 'interactsWithSchemas']],
+    ]);
+
     it('can list departments', function (): void {
         $ticket = Ticket::factory()
             ->hasAttached(Department::factory(10))
@@ -84,6 +106,110 @@ describe('rendering and authorization', function (): void {
 
         livewire(DepartmentsRelationManager::class, ['ownerRecord' => $ticket, 'pageClass' => EditTicket::class])
             ->assertCanSeeTableRecords($ticket->departments);
+    });
+
+    it('authorizes `CreateAction` using its model', function (bool $isCrossModel, bool $ownerAllowed, bool $actionAllowed, ?bool $authorization, bool $expectedAllowed, bool $isBulk): void {
+        $ownerResponse = $ownerAllowed ? Response::allow('Owner grant.') : Response::deny('Owner denial.');
+        $actionResponse = $actionAllowed ? Response::allow('Action grant.') : Response::denyAsNotFound('Action denial.', 'action-denied');
+        app()->bind(DepartmentPolicy::class . '::create', static fn (): Response => $ownerResponse);
+        app()->bind(TicketPolicy::class . '::create', static fn (): Response => $actionResponse);
+        $ticket = Ticket::factory()->create();
+
+        CreateAction::configureUsing(
+            static fn (CreateAction $action) => $action
+                ->model($isCrossModel ? Ticket::class : Department::class)
+                ->authorize($authorization)
+                ->bulk($isBulk),
+            during: function () use ($ticket, $isCrossModel, $authorization, $expectedAllowed, $ownerResponse, $actionResponse, $isBulk): void {
+                $component = livewire(DepartmentsRelationManager::class, ['ownerRecord' => $ticket, 'pageClass' => EditTicket::class])
+                    ->{$expectedAllowed ? 'assertActionVisible' : 'assertActionHidden'}(TestAction::make('create')->table()->bulk($isBulk));
+                $action = $component->instance()->getTable()->getAction('create');
+
+                expect($action->getUrl())->toBeNull();
+
+                if ($authorization === null) {
+                    expect($action->getAuthorizationResponse())->toBe($isCrossModel ? $actionResponse : $ownerResponse);
+                }
+
+                $component->mountAction(TestAction::make('create')->table()->bulk($isBulk))
+                    ->{$expectedAllowed ? 'assertActionMounted' : 'assertActionNotMounted'}();
+            },
+        );
+    })->with('create action authorization subjects')->with([false, true]);
+
+    it('preserves protected create authorization overrides only for the table model', function (bool $isCrossModel): void {
+        $ticket = Ticket::factory()->create();
+
+        CreateAction::configureUsing(
+            static fn (CreateAction $action) => $action->model($isCrossModel ? Ticket::class : Department::class),
+            during: function () use ($ticket, $isCrossModel): void {
+                $component = livewire(CreateAuthorizationDepartmentsRelationManager::class, ['ownerRecord' => $ticket, 'pageClass' => EditTicket::class])
+                    ->{$isCrossModel ? 'assertActionVisible' : 'assertActionHidden'}(TestAction::make('create')->table());
+
+                expect($component->instance()->getTable()->getAction('create')->getUrl())
+                    ->toBe($isCrossModel ? null : DepartmentResource::getUrl('create'));
+            },
+        );
+    })->with([false, true]);
+
+    it('refuses default `CreateAction` authorization in read-only relation managers while preserving explicit authorization precedence', function (bool $isCrossModel, ?bool $authorization): void {
+        $ticket = Ticket::factory()->create();
+
+        CreateAction::configureUsing(
+            static fn (CreateAction $action) => $action
+                ->model($isCrossModel ? Ticket::class : Department::class)
+                ->authorize($authorization),
+            during: function () use ($ticket, $authorization): void {
+                livewire(DepartmentsRelationManager::class, ['ownerRecord' => $ticket, 'pageClass' => ViewTicket::class])
+                    ->{$authorization ? 'assertActionVisible' : 'assertActionHidden'}(TestAction::make('create')->table())
+                    ->mountAction(TestAction::make('create')->table())
+                    ->{$authorization ? 'assertActionMounted' : 'assertActionNotMounted'}();
+            },
+        );
+    })->with([false, true])->with([null, false, true]);
+
+    it('delegates edit authorization to the related resource', function (string $relationManager): void {
+        app()->bind(DepartmentPolicy::class . '::update', static fn (): bool => true);
+        $ticket = Ticket::factory()->create();
+        $editable = Department::factory()->create(['name' => 'Editable']);
+        $readOnly = Department::factory()->create(['name' => 'Read only']);
+        $ticket->departments()->attach([$editable->getKey(), $readOnly->getKey()]);
+
+        $component = livewire($relationManager, ['ownerRecord' => $ticket, 'pageClass' => EditTicket::class])
+            ->assertActionVisible(TestAction::make(EditAction::class)->table($editable))
+            ->assertActionHidden(TestAction::make(EditAction::class)->table($readOnly))
+            ->mountAction(TestAction::make(EditAction::class)->table($readOnly))
+            ->assertActionNotMounted();
+
+        expect($component->instance()->getAuthorizationResponse('update', $readOnly)->message())->toBe('Editing is disabled by the resource.');
+
+        app()->bind(DepartmentPolicy::class . '::update', static fn (): Response => Response::denyAsNotFound('Policy denial.'));
+
+        expect($component->instance()->getAuthorizationResponse('update', $editable))
+            ->denied()->toBeTrue()
+            ->status()->toBe(404)
+            ->message()->toBe('Policy denial.');
+
+        $component
+            ->assertActionHidden(TestAction::make(EditAction::class)->table($editable))
+            ->assertActionVisible(TestAction::make(DeleteAction::class)->table($readOnly))
+            ->callAction(TestAction::make(DeleteAction::class)->table($readOnly));
+
+        expect($readOnly->fresh()->trashed())->toBeTrue();
+    })->with([
+        'resource edit hook' => [EditResourceAuthorizationDepartmentsRelationManager::class],
+        'ignores noncanonical update hook' => [CustomUpdateResourceAuthorizationDepartmentsRelationManager::class],
+    ]);
+
+    it('honors relationship table `getEditAuthorizationResponse()` overrides', function (): void {
+        $ticket = Ticket::factory()->hasAttached(Department::factory())->create();
+        $department = $ticket->departments->first();
+
+        livewire(EditAuthorizationDepartmentsRelationManager::class, ['ownerRecord' => $ticket, 'pageClass' => EditTicket::class])
+            ->assertActionHidden(TestAction::make(EditAction::class)->table($department))
+            ->mountAction(TestAction::make(EditAction::class)->table($department))
+            ->assertActionNotMounted()
+            ->assertActionVisible(TestAction::make(DeleteAction::class)->table($department));
     });
 
     it('resolves record URLs and actions without leaking record context between records', function (bool $isTableLazyLoaded, string $actionHierarchy): void {
@@ -2138,5 +2264,37 @@ class LegacyTitleDepartmentsRelationManager extends DepartmentsWithAttachActionR
     public function table(Table $table): Table
     {
         return parent::table($table)->headerActions([AttachAction::make()->preloadRecordSelect()]);
+    }
+}
+
+class EditResourceAuthorizationDepartmentsRelationManager extends DepartmentsRelationManager
+{
+    protected static ?string $relatedResource = EditAuthorizationDepartmentResource::class;
+}
+
+class CustomUpdateResourceAuthorizationDepartmentsRelationManager extends DepartmentsRelationManager
+{
+    protected static ?string $relatedResource = CustomUpdateAuthorizationDepartmentResource::class;
+}
+
+class EditAuthorizationDepartmentsRelationManager extends DepartmentsRelationManager
+{
+    protected function getEditAuthorizationResponse(Model $record): Response
+    {
+        $response = parent::getEditAuthorizationResponse($record);
+
+        return $response->denied() ? $response : Response::deny();
+    }
+}
+
+class CreateAuthorizationDepartmentsRelationManager extends DepartmentsRelationManager
+{
+    protected static ?string $relatedResource = DepartmentResource::class;
+
+    protected function getCreateAuthorizationResponse(): Response
+    {
+        $response = parent::getCreateAuthorizationResponse();
+
+        return $response->denied() ? $response : Response::deny('Relationship hook denial.');
     }
 }
