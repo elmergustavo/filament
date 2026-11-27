@@ -12,6 +12,7 @@ use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 use Illuminate\Contracts\Support\Arrayable;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\Pivot;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
@@ -324,6 +325,12 @@ trait HasState
     public function dehydrateState(array &$state, bool $isDehydrated = true): void
     {
         if (! ($isDehydrated && $this->isDehydrated())) {
+            // Descendants may own supplementary state outside this component's
+            // state path, so they must also receive the exclusion decision.
+            foreach ($this->getChildSchemas(withHidden: (! $this->hasStatePath()) || (! $this->isHiddenAndNotDehydratedWhenHidden())) as $childSchema) {
+                $childSchema->dehydrateState($state, isDehydrated: false);
+            }
+
             if ($this->hasStatePath()) {
                 $statePath = $this->getStatePath();
 
@@ -332,7 +339,7 @@ trait HasState
                     // `statePath`, removing the entire key would destroy that
                     // sibling's data. Instead, only remove the state paths
                     // owned by *this* component's descendants.
-                    if ($this->hasComponentWithStatePath($statePath)) {
+                    if ($isDehydrated && $this->hasComponentWithStatePath($statePath)) {
                         $descendantStatePathsToForget = $this->getDescendantStatePathsToForget($statePath);
 
                         Arr::forget($state, $descendantStatePathsToForget); /** @phpstan-ignore parameterByRef.type */
@@ -351,16 +358,6 @@ trait HasState
 
                     return;
                 }
-
-                return;
-            }
-
-            // If the component is not dehydrated, but it has child components,
-            // we need to dehydrate the child component containers while
-            // informing them that they are not dehydrated, so that their
-            // child components get removed from the state.
-            foreach ($this->getChildSchemas(withHidden: true) as $childSchema) {
-                $childSchema->dehydrateState($state, isDehydrated: false);
             }
 
             return;
@@ -419,7 +416,8 @@ trait HasState
             if (
                 $component->hasStatePath() &&
                 ($componentStatePath === $statePath) &&
-                ($hasPassedThisComponent || ($component->getKey() !== $this->getKey()))
+                ($hasPassedThisComponent || ($component->getKey() !== $this->getKey())) &&
+                $component->isDehydrated()
             ) {
                 return true;
             }
@@ -1089,6 +1087,34 @@ trait HasState
     public function getConstantStateFromRecord(Model $record): mixed
     {
         $this->relatedRecords = [];
+
+        $stateRecord = $record;
+
+        foreach (explode('.', (string) ($this->hasContainer() ? $this->getConstantStatePath() : $this->getStateRelationshipPath())) as $attribute) {
+            if ($stateRecord instanceof Model) {
+                if (($stateRecord instanceof Pivot) && in_array($attribute, $stateRecord->getHidden(), true)) {
+                    return null;
+                }
+
+                foreach ($stateRecord->getRelations() as $relationship) {
+                    if (! ($relationship instanceof Pivot)) {
+                        continue;
+                    }
+
+                    foreach ($relationship->getHidden() as $hiddenAttribute) {
+                        if (in_array($attribute, [$hiddenAttribute, "pivot_{$hiddenAttribute}"], true)) {
+                            return null;
+                        }
+                    }
+                }
+
+                $stateRecord = $stateRecord->getRelations()[$attribute] ?? null;
+            } elseif ($stateRecord instanceof Collection) {
+                $stateRecord = $stateRecord->get($attribute);
+            } else {
+                break;
+            }
+        }
 
         $relationship = $this->getStateRelationship($record);
 
