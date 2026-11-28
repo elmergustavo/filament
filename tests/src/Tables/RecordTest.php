@@ -19,6 +19,7 @@ use Filament\Tests\Fixtures\Models\Ticket;
 use Filament\Tests\Fixtures\Models\User;
 use Filament\Tests\Tables\TestCase;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\Pivot;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Collection;
@@ -232,6 +233,21 @@ function postSort(int | string $postKey): ?int
 }
 
 describe('browser reordering', function (): void {
+    it('hides related-resource reorder controls in read-only relation managers', function (): void {
+        Artisan::call('filament:assets');
+        $owner = User::factory()->create();
+        $this->actingAs($owner);
+        Post::factory()->for($owner, 'author')->create(['title' => 'First', 'sort' => 1]);
+        Post::factory()->for($owner, 'author')->create(['title' => 'Second', 'sort' => 2]);
+
+        $page = visit('/table-reordering-browser-test?relationOwner=' . $owner->getKey());
+        $page->assertSee('First')->assertSee('Second')
+            ->assertMissing('[data-testid="toggle-reordering"]')
+            ->assertMissing('[data-table-reorder-direction]')
+            ->assertNoAccessibilityIssues();
+        $page->inDarkMode()->assertNoAccessibilityIssues();
+    });
+
     it('persists drag reordering and disables moves beyond table boundaries', function (bool $grid): void {
         Artisan::call('filament:assets');
         $posts = Post::factory()->count(3)->sequence(
@@ -424,6 +440,31 @@ describe('reordering', function (): void {
         }
     });
 
+    it('does not reorder excluded `BelongsToMany` pivot records without a configured pivot key', function (string $constraint): void {
+        $ticket = Ticket::factory()->create();
+        $excludedDepartment = Department::factory()->create();
+        $admittedDepartment = Department::factory()->create();
+        $ticket->departments()->attach($excludedDepartment, ['quantity' => 3, 'sort' => 10]);
+        $ticket->departments()->attach($admittedDepartment, ['quantity' => 7, 'sort' => 20]);
+
+        $relationship = $ticket->belongsToMany(Department::class)->withPivot(['quantity', 'sort']);
+
+        if ($constraint === 'global scope') {
+            $relationship->getQuery()->withGlobalScope('quantity', static fn (Builder $query): Builder => $query->where('department_ticket.quantity', 7));
+        }
+
+        Table::configureUsing(
+            static fn (Table $table): Table => $table->relationship(static fn (): BelongsToMany => clone $relationship),
+            during: static fn () => livewire(ScopedTicketDepartmentsTable::class, [
+                'ticketKey' => $ticket->getKey(),
+                'constraint' => $constraint,
+            ])->call('reorderTable', [$admittedDepartment->getKey(), $excludedDepartment->getKey()]),
+        );
+
+        expect(DB::table('department_ticket')->where('ticket_id', $ticket->getKey())->where('department_id', $excludedDepartment->getKey())->value('sort'))->toEqual(10)
+            ->and(DB::table('department_ticket')->where('ticket_id', $ticket->getKey())->where('department_id', $admittedDepartment->getKey())->value('sort'))->toEqual(1);
+    })->with(['modifyQueryUsing', 'global scope']);
+
     it('does not reorder another parent\'s pivot records', function (): void {
         $departments = Department::factory()->count(3)->create();
 
@@ -480,6 +521,18 @@ describe('reordering', function (): void {
         foreach ($order as $index => $postKey) {
             expect(postSort($postKey))->toBe($index + 1);
         }
+    });
+
+    it('normalizes associative reorder payloads before assigning positions', function (): void {
+        $posts = Post::factory()->count(2)->create();
+
+        livewire(PostsReorderableTable::class)
+            ->call('reorderTable', [98 => $posts[1]->getKey(), 99 => $posts[0]->getKey()]);
+
+        expect(Post::query()->orderBy('sort')->pluck('id')->all())->toBe([
+            $posts[1]->getKey(),
+            $posts[0]->getKey(),
+        ])->and(Post::query()->orderBy('sort')->pluck('sort')->all())->toBe([1, 2]);
     });
 
     it('reorders records in the `desc` direction', function (): void {
